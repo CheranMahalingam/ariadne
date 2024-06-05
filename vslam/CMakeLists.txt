@@ -16,30 +16,41 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
-add_library(vslam_lib src/vslam.cpp)
+set(dependencies
+  rclcpp
+  sensor_msgs)
+
+find_package(OpenCV REQUIRED)
+
+add_library(vslam_lib
+  src/vslam.cpp
+  src/tracking/feature_extractor.cpp)
 target_include_directories(vslam_lib
-  PUBLIC include)
-ament_target_dependencies(vslam_lib rclcpp)
+  PUBLIC
+  include
+  ${OpenCV_INCLUDE_DIRS})
+ament_target_dependencies(vslam_lib ${dependencies})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
 
-  set(ament_cmake_clang_format_CONFIG_FILE .clang-format)
-
   ament_lint_auto_find_test_dependencies()
 endif()
 
 add_executable(vslam_node src/vslam_node.cpp)
-target_link_libraries(vslam_node vslam_lib)
+target_link_libraries(vslam_node
+  vslam_lib
+  ${OpenCV_LIBS})
 
 install(TARGETS
   vslam_node
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
-  launch
+  launch config
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()
