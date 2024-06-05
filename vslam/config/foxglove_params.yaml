@@ -1,0 +1,6 @@
+/foxglove_bridge:
+  ros__parameters:
+    port: 8767
+    address: "127.0.0.1"
+    num_threads: 0
+    capabilities: ["clientPublish","parameters","parametersSubscribe","services","connectionGraph","assets"]
