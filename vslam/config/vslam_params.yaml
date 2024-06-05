@@ -1,0 +1,12 @@
+/vslam:
+  ros__parameters:
+    # ORB params
+    orb_scale_pyramid_levels: 8
+    orb_pyramid_scale_factor: 1.2
+    orb_num_features: 2000
+    orb_initial_FAST_threshold: 20
+    orb_min_FAST_threshold: 7
+
+    # Camera params
+    camera_width: 1920
+    camera_height: 1080
