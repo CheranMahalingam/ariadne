@@ -1,0 +1,4 @@
+/vslam:
+  ros__parameters:
+    # ORB params
+    orb_scale_pyramid_levels: 8
