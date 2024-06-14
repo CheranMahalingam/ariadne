@@ -56,6 +56,7 @@ ARG HOST_GID=1000
 
 # Install useful development tools
 RUN apt-get update && apt-get install -y \
+    ninja-build \
     tmux \
     vim \
     ripgrep \
