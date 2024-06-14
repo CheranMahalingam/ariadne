@@ -22,13 +22,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(foxglove_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(message_filters REQUIRED)
 
 set(dependencies
   rclcpp
+  foxglove_msgs
   sensor_msgs
-  cv_bridge)
+  cv_bridge
+  message_filters)
 
 find_package(OpenCV REQUIRED)
 
@@ -53,6 +57,14 @@ add_executable(vslam_node src/vslam_node.cpp)
 target_link_libraries(vslam_node
   vslam_lib
   ${OpenCV_LIBS})
+
+add_executable(tum_node src/tum_node.cpp)
+target_include_directories(tum_node
+  PUBLIC
+  include)
+ament_target_dependencies(tum_node
+  rclcpp
+  sensor_msgs)
 
 install(TARGETS
   vslam_node
