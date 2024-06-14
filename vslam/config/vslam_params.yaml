@@ -10,3 +10,5 @@
     # Camera params
     camera_width: 1920
     camera_height: 1080
+
+    depth_threshold: 40.0

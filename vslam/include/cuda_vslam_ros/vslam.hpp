@@ -3,13 +3,16 @@
 
 #include "tracking/feature_extractor.hpp"
 
-#include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/image.hpp"
-
-#include <memory>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 
 namespace vslam
 {
+
+using SyncPolicy = message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
 
 class VSLAMNode : public rclcpp::Node
 {
@@ -17,7 +20,9 @@ public:
   VSLAMNode(const rclcpp::NodeOptions & options);
 
 private:
-  void rgbImageCallback(const sensor_msgs::msg::Image::ConstSharedPtr & msg) const;
+  void rgbdImageCallback(
+    const sensor_msgs::msg::Image::ConstSharedPtr & rgb_image,
+    const sensor_msgs::msg::Image::ConstSharedPtr & depth_image) const;
 
   // ROS configurable parameters
   int orb_scale_pyramid_levels_;
@@ -27,11 +32,13 @@ private:
   int orb_min_FAST_threshold_;
   int camera_width_;
   int camera_height_;
+  float depth_threshold_;
 
   std::unique_ptr<FeatureExtractor> extractor_;
 
-  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr rgb_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_;
+  message_filters::Subscriber<sensor_msgs::msg::Image> rgb_sub_;
+  message_filters::Subscriber<sensor_msgs::msg::Image> depth_sub_;
+  message_filters::Synchronizer<SyncPolicy> camera_sync_;
 };
 
 }  // vslam
