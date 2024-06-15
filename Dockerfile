@@ -87,6 +87,8 @@ git config --global --add safe.directory /home/docker/ros2_ws
 bass source /opt/ros/"${ROS_DISTRO}"/setup.bash
 EOF
 
+EXPOSE 8765
+
 CMD ["fish"]
 
 FROM base as prod

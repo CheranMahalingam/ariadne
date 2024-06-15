@@ -32,6 +32,7 @@ then
   docker run -it \
     --user "$HOST_UID":"$HOST_GID" \
     --name atlas-robot \
+    --network host \
     --mount type=bind,source="$(pwd)",target=/home/docker/ros2_ws \
     atlas:latest
 else
