@@ -7,8 +7,7 @@
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::NodeOptions options;
-  rclcpp::spin(std::make_shared<vslam::VSLAMNode>(options));
+  rclcpp::spin(std::make_shared<vslam::VSLAMNode>());
   rclcpp::shutdown();
   return 0;
 }

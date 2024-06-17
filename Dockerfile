@@ -57,6 +57,8 @@ ARG HOST_GID=1000
 # Install useful development tools
 RUN apt-get update && apt-get install -y \
     ninja-build \
+    gdb \
+    gdbserver \
     tmux \
     vim \
     ripgrep \
@@ -78,7 +80,8 @@ RUN curl -L https://get.oh-my.fish > install && \
     fish -c "omf install bass" && \
     rm install && \
     git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && \
-    ~/.fzf/install
+    ~/.fzf/install && \
+    wget -P ~ https://github.com/cyrus-and/gdb-dashboard/raw/master/.gdbinit
 
 RUN <<EOF cat>> ~/.config/fish/config.fish
 # Workaround for newer git versions where git verifies that the parent directory

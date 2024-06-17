@@ -15,7 +15,7 @@ public:
   static constexpr int EDGE_THRESHOLD = 19;
   static constexpr int KEY_POINT_CELL_LEN = 30;
   static constexpr int FAST_DETECTOR_RADIUS = 3;
-  static constexpr int MAX_IDLE_ITERATIONS = 5;
+  static constexpr int MAX_IDLE_ITERATIONS = 1;
   static constexpr int GAUSSIAN_KERNEL_SIGMA = 2;
 
   FeatureExtractor(
@@ -79,7 +79,7 @@ private:
   std::vector<cv::Mat> buildImagePyramid(const cv::Mat & image);
 
   std::vector<cv::KeyPoint> buildQuadTree(
-    const cv::Mat & image, const int num_features, const RectBounds & bounds,
+    const cv::Mat & image, int num_features, const RectBounds & bounds,
     const std::vector<cv::KeyPoint> & key_points);
 
   std::vector<cv::KeyPoint> computeFASTFeatures(

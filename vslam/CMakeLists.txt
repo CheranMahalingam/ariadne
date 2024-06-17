@@ -12,8 +12,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-O3 -DNDEBUG)
   elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(
-      -O0 -ggdb -fno-omit-frame-pointer -fsanitize=address -fsanitize=undefined)
-    add_link_options(-fsanitize=address -fsanitize=undefined)
+      -O0 -ggdb -fno-omit-frame-pointer -fsanitize=undefined)
+    add_link_options(-fsanitize=undefined)
   endif()
 endif()
 
@@ -26,6 +26,7 @@ find_package(foxglove_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(rosbag2_cpp REQUIRED)
 
 set(dependencies
   rclcpp
@@ -58,16 +59,31 @@ target_link_libraries(vslam_node
   vslam_lib
   ${OpenCV_LIBS})
 
-add_executable(tum_node src/tum_node.cpp)
-target_include_directories(tum_node
+add_executable(tum_bag_generator src/tools/tum_bag_generator.cpp)
+target_include_directories(tum_bag_generator
   PUBLIC
-  include)
-ament_target_dependencies(tum_node
+  include
+  ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(tum_bag_generator ${OpenCV_LIBS})
+ament_target_dependencies(tum_bag_generator
   rclcpp
-  sensor_msgs)
+  sensor_msgs
+  rosbag2_cpp
+  cv_bridge)
+
+add_executable(feature_plot src/tools/feature_plot.cpp)
+target_include_directories(feature_plot
+  PUBLIC
+  include
+  ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(feature_plot
+  vslam_lib
+  ${OpenCV_LIBS})
 
 install(TARGETS
   vslam_node
+  tum_bag_generator
+  feature_plot
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
   launch config

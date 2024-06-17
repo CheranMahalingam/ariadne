@@ -1,12 +1,15 @@
 #include "cuda_vslam_ros/vslam.hpp"
 
 #include <cv_bridge/cv_bridge.h>
+#include <foxglove_msgs/msg/circle_annotation.hpp>
 
 namespace vslam
 {
 
-VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
-: Node("vslam", options)
+int VSLAMNode::debug_frame_count = 0;
+
+VSLAMNode::VSLAMNode()
+: Node("vslam")
 {
   this->declare_parameter("orb_scale_pyramid_levels", 8);
   this->declare_parameter("orb_pyramid_scale_factor", 1.2);
@@ -33,8 +36,8 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
     orb_initial_FAST_threshold_,
     orb_min_FAST_threshold_);
 
-  annotation_debug_pub_ = this->create_publisher<foxglove_msgs::msg::RawImage>(
-    "/debug/slam/features", MAX_QUEUE_SIZE);
+  orb_features_debug_pub_ = this->create_publisher<foxglove_msgs::msg::ImageAnnotations>(
+    "/debug/localization/orb_features", MAX_QUEUE_SIZE);
 
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");
@@ -65,8 +68,37 @@ void VSLAMNode::track(
   cv::Mat descriptors;
   extractor_->ComputeFeatures(grey, key_points, descriptors);
 
-  auto msg = foxglove_msgs::msg::RawImage();
-  annotation_debug_pub_->publish(msg);
+  debugORBFeatures(key_points, timestamp);
+}
+
+void VSLAMNode::debugORBFeatures(
+  const std::vector<cv::KeyPoint> & key_points, rclcpp::Time timestamp)
+{
+  if (debug_frame_count % 5 == 0) {
+    auto annotation_msg = foxglove_msgs::msg::ImageAnnotations();
+    RCLCPP_INFO(this->get_logger(), "LEN %ld", key_points.size());
+    for (int i = 0; i < std::min(int(key_points.size()), 100); i++) {
+      auto kp = key_points[i];
+      auto circle_msg = foxglove_msgs::msg::CircleAnnotation();
+      circle_msg.timestamp = timestamp;
+      circle_msg.position.x = kp.pt.x;
+      circle_msg.position.y = kp.pt.y;
+      // RCLCPP_INFO(this->get_logger(), "X %f Y %f", kp.pt.x, kp.pt.y);
+      // circle_msg.thickness = 3;
+      circle_msg.fill_color.r = 0;
+      circle_msg.fill_color.g = 1;
+      circle_msg.fill_color.b = 0;
+      circle_msg.fill_color.a = 1;
+      // circle_msg.outline_color.r = 1;
+      // circle_msg.outline_color.g = 1;
+      // circle_msg.outline_color.b = 1;
+      // circle_msg.outline_color.a = 1;
+      circle_msg.diameter = 5;
+      annotation_msg.circles.push_back(circle_msg);
+    }
+    orb_features_debug_pub_->publish(annotation_msg);
+  }
+  debug_frame_count++;
 }
 
 }  // vslam

@@ -22,6 +22,7 @@ def generate_launch_description():
         package='cuda_vslam_ros',
         executable='vslam_node',
         parameters=[LaunchConfiguration('vslam_param_file')],
+        # prefix=['gdbserver localhost:3000'],
         output='screen',
     )
 

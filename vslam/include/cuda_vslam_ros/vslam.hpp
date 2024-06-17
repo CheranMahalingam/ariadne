@@ -8,7 +8,7 @@
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <rclcpp/rclcpp.hpp>
-#include <foxglove_msgs/msg/raw_image.hpp>
+#include <foxglove_msgs/msg/image_annotations.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
 #include <memory>
@@ -25,7 +25,9 @@ class VSLAMNode : public rclcpp::Node
 public:
   static constexpr int MAX_QUEUE_SIZE = 10;
 
-  VSLAMNode(const rclcpp::NodeOptions & options);
+  static int debug_frame_count;
+
+  VSLAMNode();
 
 private:
   void rgbdImageCallback(
@@ -34,6 +36,9 @@ private:
 
   void track(
     const cv::Mat & rgb, const cv::Mat & depth, rclcpp::Time timestamp);
+
+  void debugORBFeatures(
+    const std::vector<cv::KeyPoint> & key_points, rclcpp::Time timestamp);
 
   // ROS configurable parameters
   int orb_scale_pyramid_levels_;
@@ -47,7 +52,7 @@ private:
 
   std::unique_ptr<FeatureExtractor> extractor_;
 
-  rclcpp::Publisher<foxglove_msgs::msg::RawImage>::SharedPtr annotation_debug_pub_;
+  rclcpp::Publisher<foxglove_msgs::msg::ImageAnnotations>::SharedPtr orb_features_debug_pub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> rgb_sub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> depth_sub_;
   std::unique_ptr<ApproximateTimeSyncPolicy> camera_syncer_;

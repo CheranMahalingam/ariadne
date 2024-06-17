@@ -2,6 +2,7 @@
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/features2d.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include <array>
 #include <queue>
@@ -15,6 +16,7 @@ void FeatureExtractor::QuadTreeNode::Split(
 {
   int x_mid = (this->bounds.x_max - this->bounds.x_min) / 2;
   int y_mid = (this->bounds.y_max - this->bounds.y_min) / 2;
+  // RCLCPP_INFO(rclcpp::get_logger("test"), "xmin %d xmax %d ymin %d ymax %d", this->bounds.x_min, this->bounds.x_max, this->bounds.y_min, this->bounds.y_max);
 
   // Define new boundaries for child nodes.
   // n1 | n3
@@ -44,14 +46,18 @@ void FeatureExtractor::QuadTreeNode::Split(
     if (point.pt.x < x_mid) {
       if (point.pt.y < y_mid) {
         n1.children.push_back(point);
+        // RCLCPP_INFO(rclcpp::get_logger("test"), "n1 %f %f", point.pt.x, point.pt.y);
       } else {
         n2.children.push_back(point);
+        // RCLCPP_INFO(rclcpp::get_logger("test"), "n2 %f %f", point.pt.x, point.pt.y);
       }
     } else {
       if (point.pt.y < y_mid) {
         n3.children.push_back(point);
+        // RCLCPP_INFO(rclcpp::get_logger("test"), "n3 %f %f", point.pt.x, point.pt.y);
       } else {
         n4.children.push_back(point);
+        // RCLCPP_INFO(rclcpp::get_logger("test"), "n4 %f %f", point.pt.x, point.pt.y);
       }
     }
   }
@@ -122,6 +128,7 @@ void FeatureExtractor::ComputeFeatures(
 
   int num_key_points = 0;
   for (int level = 0; level < orb_levels_; level++) {
+    // RCLCPP_INFO(rclcpp::get_logger("test"), "TOTAL %ld", key_point_pyramid[level].size());
     num_key_points += key_point_pyramid[level].size();
   }
   descriptor_arr.create(num_key_points, 32, CV_8U);
@@ -145,12 +152,14 @@ std::vector<std::vector<cv::KeyPoint>> FeatureExtractor::computeKeyPoints(
   for (int level = 0; level < orb_levels_; level++) {
     RectBounds bounds(
       EDGE_THRESHOLD - FAST_DETECTOR_RADIUS,
-      EDGE_THRESHOLD - FAST_DETECTOR_RADIUS,
       pyramid[level].cols - EDGE_THRESHOLD + FAST_DETECTOR_RADIUS,
+      EDGE_THRESHOLD - FAST_DETECTOR_RADIUS,
       pyramid[level].rows - EDGE_THRESHOLD + FAST_DETECTOR_RADIUS);
 
     int cols = (bounds.x_max - bounds.x_min) / KEY_POINT_CELL_LEN;
     int rows = (bounds.y_max - bounds.y_min) / KEY_POINT_CELL_LEN;
+    // RCLCPP_INFO(
+    //   rclcpp::get_logger("test"), "ROW %d COL %d", rows, cols);
     Grid grid(
       cols, rows,
       std::ceil(float(bounds.x_max - bounds.x_min) / cols),
@@ -158,13 +167,18 @@ std::vector<std::vector<cv::KeyPoint>> FeatureExtractor::computeKeyPoints(
 
     auto pre_distributed_points = computeFASTFeatures(
       pyramid[level], bounds, grid);
+    RCLCPP_INFO(
+      rclcpp::get_logger("test"), "PRE %ld LEVEL %d", pre_distributed_points.size(), level);
 
     std::vector<cv::KeyPoint> & level_key_points = key_points[level];
     level_key_points = buildQuadTree(
       pyramid[level], features_per_level_[level], bounds,
       pre_distributed_points);
+    RCLCPP_INFO(
+      rclcpp::get_logger("test"), "POINTS %ld LEVEL %d FEATURES %d", level_key_points.size(), level, features_per_level_[level]);
 
     for (auto & kp:level_key_points) {
+      // RCLCPP_INFO(rclcpp::get_logger("test"), "AFTER QUAD X %f Y %f", kp.pt.x, kp.pt.y);
       kp.pt.x += bounds.x_min;
       kp.pt.y += bounds.y_min;
       kp.octave = level;
@@ -198,17 +212,20 @@ void FeatureExtractor::computeDescriptors(
 
     descriptor_offset += level_key_points.size();
   }
+  // RCLCPP_INFO(rclcpp::get_logger("test"), "DESCRIPTOR DONE");
 }
 
 void FeatureExtractor::computeOrientation(
   const std::vector<cv::Mat> & pyramid,
   std::vector<std::vector<cv::KeyPoint>> & key_points)
 {
+  RCLCPP_INFO(rclcpp::get_logger("test"), "ORIENTATION START");
   for (int level = 0; level < int(pyramid.size()); level++) {
     for (auto & kp:key_points[level]) {
       kp.angle = intensityCentroidAngle(pyramid[level], kp.pt);
     }
   }
+  RCLCPP_INFO(rclcpp::get_logger("test"), "ORIENTATION DONE");
 }
 
 std::vector<cv::Mat> FeatureExtractor::buildImagePyramid(const cv::Mat & image)
@@ -239,10 +256,12 @@ std::vector<cv::Mat> FeatureExtractor::buildImagePyramid(const cv::Mat & image)
 }
 
 std::vector<cv::KeyPoint> FeatureExtractor::buildQuadTree(
-  const cv::Mat & image, const int num_features, const RectBounds & bounds,
+  const cv::Mat & image, int num_features, const RectBounds & bounds,
   const std::vector<cv::KeyPoint> & key_points)
 {
-  QuadTreeNode root(bounds, key_points);
+  RectBounds feature_bounds(
+    0, bounds.x_max - bounds.x_min, 0, bounds.y_max - bounds.y_min);
+  QuadTreeNode root(feature_bounds, key_points);
   auto comp = [](
     std::pair<int, QuadTreeNode> a, std::pair<int, QuadTreeNode> b) {
       return a.first < b.first;
@@ -255,41 +274,58 @@ std::vector<cv::KeyPoint> FeatureExtractor::buildQuadTree(
 
   std::vector<QuadTreeNode> filtered_nodes;
   std::vector<QuadTreeNode> reducable_nodes;
+  int total_nodes = 1;
   int prev_nodes = 0;
   int idle_iterations = 0;
-  while (!max_heap.empty()) {
-    auto [size, curr] = max_heap.top();
-    max_heap.pop();
-    QuadTreeNode n1, n2, n3, n4;
-    curr.Split(n1, n2, n3, n4);
+  bool finished = false;
+  while (!finished) {
+    while (!max_heap.empty() && total_nodes < num_features) {
+      RCLCPP_INFO(rclcpp::get_logger("test"), "HEAP %ld FILTERED %ld REDUCABLE %ld", max_heap.size(), filtered_nodes.size(), reducable_nodes.size());
+      auto [size, curr] = max_heap.top();
+      // RCLCPP_INFO(rclcpp::get_logger("test"), "SIZE %d", size);
+      max_heap.pop();
+      total_nodes--;
+      QuadTreeNode n1, n2, n3, n4;
+      curr.Split(n1, n2, n3, n4);
 
-    std::array<QuadTreeNode, 4> new_nodes = {n1, n2, n3, n4};
-    for (auto & node:new_nodes) {
-      if (node.children.size() == 0) {
-        continue;
+      std::array<QuadTreeNode, 4> new_nodes = {n1, n2, n3, n4};
+      for (auto & node:new_nodes) {
+        if (node.children.size() == 0) {
+          // RCLCPP_INFO(rclcpp::get_logger("test"), "EMPTY");
+          continue;
+        }
+        if (node.children.size() > 1) {
+          // RCLCPP_INFO(rclcpp::get_logger("test"), "REDUCABLE");
+          reducable_nodes.push_back(node);
+        } else {
+          // RCLCPP_INFO(rclcpp::get_logger("test"), "FILTERED");
+          filtered_nodes.push_back(node);
+        }
+        total_nodes++;
       }
-      if (node.children.size() > 1) {
-        reducable_nodes.push_back(node);
-      } else {
-        filtered_nodes.push_back(node);
-      }
+
+        // if (total_nodes >= num_features || idle_iterations >= MAX_IDLE_ITERATIONS) {
+        //   RCLCPP_INFO(rclcpp::get_logger("test"), "EXTIING HEAP %ld FILTERED %ld REDUCABLE %ld IDLE %d", max_heap.size(), filtered_nodes.size(), reducable_nodes.size(), idle_iterations);
+        //   break;
+        // }
     }
 
-    int total_nodes = max_heap.size() + filtered_nodes.size() + reducable_nodes.size();
-    if (prev_nodes == total_nodes) {
+    if (total_nodes == prev_nodes) {
       idle_iterations++;
     } else {
       idle_iterations = 0;
     }
     if (total_nodes >= num_features || idle_iterations >= MAX_IDLE_ITERATIONS) {
+      finished = true;
       break;
     }
     prev_nodes = total_nodes;
 
-    if (max_heap.empty() && !reducable_nodes.empty()) {
+    if (!reducable_nodes.empty()) {
       for (auto & node:reducable_nodes) {
         max_heap.push(std::make_pair(node.children.size(), node));
       }
+      reducable_nodes.clear();
     }
   }
 
@@ -301,7 +337,7 @@ std::vector<cv::KeyPoint> FeatureExtractor::buildQuadTree(
     dist_key_points.push_back(findMaxResponse(node));
   }
   while (!max_heap.empty()) {
-    auto &[_, node] = max_heap.top();
+    auto [_, node] = max_heap.top();
     max_heap.pop();
     dist_key_points.push_back(findMaxResponse(node));
   }
@@ -312,6 +348,8 @@ std::vector<cv::KeyPoint> FeatureExtractor::computeFASTFeatures(
   const cv::Mat & image, const RectBounds & bounds, const Grid & grid)
 {
   std::vector<cv::KeyPoint> key_points;
+  // RCLCPP_INFO(
+  //   rclcpp::get_logger("test"), "ROWS %d COLS %d", grid.rows, grid.cols);
   for (int i = 0; i < grid.rows; i++) {
     int y_offset = bounds.y_min + i * grid.cell_height;
     int y_offset_max = y_offset + grid.cell_height + 2 * FAST_DETECTOR_RADIUS;
@@ -321,6 +359,8 @@ std::vector<cv::KeyPoint> FeatureExtractor::computeFASTFeatures(
     if (y_offset_max > bounds.y_max) {
       y_offset_max = bounds.y_max;
     }
+    // RCLCPP_INFO(
+    //   rclcpp::get_logger("test"), "Y BOUNDS %d %d", y_offset, y_offset_max);
 
     for (int j = 0; j < grid.cols; j++) {
       int x_offset = bounds.x_min + j * grid.cell_width;
@@ -331,6 +371,8 @@ std::vector<cv::KeyPoint> FeatureExtractor::computeFASTFeatures(
       if (x_offset_max > bounds.x_max) {
         x_offset_max = bounds.x_max;
       }
+      // RCLCPP_INFO(
+      //   rclcpp::get_logger("test"), "X BOUNDS %d %d", x_offset, x_offset_max);
 
       std::vector<cv::KeyPoint> key_points_cell;
       cv::FAST(
@@ -342,10 +384,15 @@ std::vector<cv::KeyPoint> FeatureExtractor::computeFASTFeatures(
           key_points_cell, orb_min_FAST_threshold_, true);
       }
 
+      // RCLCPP_INFO(
+      //   rclcpp::get_logger("test"), "KEY POINTS %ld ROW %d COL %d", key_points_cell.size(), i, j);
+
       if (!key_points_cell.empty()) {
-        for (auto kp:key_points_cell) {
+        for (auto & kp:key_points_cell) {
           kp.pt.x += j * grid.cell_width;
           kp.pt.y += i * grid.cell_height;
+          // RCLCPP_INFO(
+          //   rclcpp::get_logger("test"), "KEY POINT X %f Y %f", kp.pt.x, kp.pt.y);
           key_points.push_back(kp);
         }
       }
@@ -664,8 +711,10 @@ cv::KeyPoint FeatureExtractor::findMaxResponse(const QuadTreeNode & node)
 float FeatureExtractor::intensityCentroidAngle(
   const cv::Mat & image, const cv::Point2f & point)
 {
+  // RCLCPP_INFO(rclcpp::get_logger("test"), "INTENSITY START");
   const unsigned char * center = &image.at<unsigned char>(
     cvRound(point.y), cvRound(point.x));
+  // RCLCPP_INFO(rclcpp::get_logger("test"), "X %f Y %f", point.y, point.x);
   int m_01 = 0, m_10 = 0;
   int half_patch_size = PATCH_SIZE / 2;
 
@@ -684,6 +733,7 @@ float FeatureExtractor::intensityCentroidAngle(
     }
     m_01 += y * y_sum;
   }
+  // RCLCPP_INFO(rclcpp::get_logger("test"), "INTENSITY DONE");
   return cv::fastAtan2(float(m_01), float(m_10));
 }
 

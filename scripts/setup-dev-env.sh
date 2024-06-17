@@ -37,5 +37,5 @@ then
     atlas:latest
 else
     echo "Found an instance of the atlas image running, attaching..."
-    docker attach atlas-robot
+    docker exec -it atlas-robot fish
 fi

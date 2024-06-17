@@ -17,6 +17,7 @@
   <depend>cv_bridge</depend>
   <depend>foxglove_bridge</depend>
   <depend>message_filters</depend>
+  <depend>rosbag2_cpp</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

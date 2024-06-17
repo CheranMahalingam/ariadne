@@ -3,7 +3,7 @@
     # ORB params
     orb_scale_pyramid_levels: 8
     orb_pyramid_scale_factor: 1.2
-    orb_num_features: 2000
+    orb_num_features: 500
     orb_initial_FAST_threshold: 20
     orb_min_FAST_threshold: 7
 
