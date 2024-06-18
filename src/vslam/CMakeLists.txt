@@ -14,11 +14,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(message_filters REQUIRED)
 
-add_library(vslam_lib src/vslam.cpp)
+set(dependencies
+  rclcpp
+  sensor_msgs
+  cv_bridge
+  message_filters)
+
+find_package(OpenCV REQUIRED)
+
+add_library(vslam_lib
+  src/vslam.cpp
+  src/tracking/feature_extractor.cpp)
 target_include_directories(vslam_lib
-  PUBLIC include)
-ament_target_dependencies(vslam_lib rclcpp)
+  PUBLIC
+  include
+  ${OpenCV_INCLUDE_DIRS})
+ament_target_dependencies(vslam_lib ${dependencies})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -29,7 +44,9 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(vslam_node src/vslam_node.cpp)
-target_link_libraries(vslam_node vslam_lib)
+target_link_libraries(vslam_node
+  vslam_lib
+  ${OpenCV_LIBS})
 
 install(TARGETS
   vslam_node
