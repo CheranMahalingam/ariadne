@@ -1,12 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
 project(vslam)
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
-
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wnon-virtual-dtor -pedantic)
+
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O3 -DNDEBUG)
+  elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(
+      -O0 -ggdb -fno-omit-frame-pointer -fsanitize=undefined)
+    add_link_options(-fsanitize=undefined)
+  endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
