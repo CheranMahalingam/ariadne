@@ -11,6 +11,6 @@ Then to build and launch the visual SLAM ROS node within the container run,
 ```
 colcon build
 bass source install/setup.bash
-ros2 launch vslam vslam.launch.py
+ros2 launch ariadne_launch ariadne.launch.py
 ```
 

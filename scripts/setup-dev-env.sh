@@ -32,6 +32,7 @@ then
   docker run -it \
     --user "$HOST_UID":"$HOST_GID" \
     --name ariadne \
+    --network host \
     --mount type=bind,source="$(pwd)",target=/home/docker/ros2_ws \
     ariadne:latest
 else
