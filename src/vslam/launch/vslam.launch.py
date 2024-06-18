@@ -28,4 +28,3 @@ def generate_launch_description():
         vslam_param,
         vslam,
     ])
-

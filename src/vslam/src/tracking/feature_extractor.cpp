@@ -692,4 +692,3 @@ float FeatureExtractor::intensityCentroidAngle(
 }
 
 }  // vslam
-
