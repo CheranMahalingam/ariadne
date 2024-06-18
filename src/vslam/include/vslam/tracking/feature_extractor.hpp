@@ -111,4 +111,3 @@ private:
 }  // vslam
 
 #endif  // VSLAM__FEATURE_EXTRACTOR_HPP_
-

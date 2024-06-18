@@ -25,6 +25,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(rosbag2_cpp REQUIRED)
 
 set(dependencies
   rclcpp
@@ -56,8 +57,21 @@ target_link_libraries(vslam_node
   vslam_lib
   ${OpenCV_LIBS})
 
+add_executable(tum_rosbag src/tools/tum_rosbag.cpp)
+target_include_directories(tum_rosbag
+  PUBLIC
+  include
+  ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(tum_rosbag ${OpenCV_LIBS})
+ament_target_dependencies(tum_rosbag
+  rclcpp
+  sensor_msgs
+  rosbag2_cpp
+  cv_bridge)
+
 install(TARGETS
   vslam_node
+  tum_rosbag
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
   launch config
