@@ -27,12 +27,6 @@ find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 
-set(dependencies
-  rclcpp
-  sensor_msgs
-  cv_bridge
-  message_filters)
-
 find_package(OpenCV REQUIRED)
 
 add_library(vslam_lib
@@ -42,7 +36,11 @@ target_include_directories(vslam_lib
   PUBLIC
   include
   ${OpenCV_INCLUDE_DIRS})
-ament_target_dependencies(vslam_lib ${dependencies})
+ament_target_dependencies(vslam_lib
+  rclcpp
+  sensor_msgs
+  cv_bridge
+  message_filters)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -69,9 +67,19 @@ ament_target_dependencies(tum_rosbag
   rosbag2_cpp
   cv_bridge)
 
+add_executable(feature_plot src/tools/feature_plot.cpp)
+target_include_directories(feature_plot
+  PUBLIC
+  include
+  ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(feature_plot
+  vslam_lib
+  ${OpenCV_LIBS})
+
 install(TARGETS
   vslam_node
   tum_rosbag
+  feature_plot
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
   launch config
