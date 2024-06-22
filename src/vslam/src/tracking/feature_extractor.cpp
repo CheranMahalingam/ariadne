@@ -58,34 +58,28 @@ void FeatureExtractor::QuadTreeNode::Split(
   }
 }
 
-FeatureExtractor::FeatureExtractor(
-  int orb_levels, float orb_scale_factor, int orb_num_features,
-  int orb_initial_FAST_threshold, int orb_min_FAST_threshold)
-: orb_levels_(orb_levels),
-  orb_scale_factor_(orb_scale_factor),
-  orb_num_features_(orb_num_features),
-  orb_initial_FAST_threshold_(orb_initial_FAST_threshold),
-  orb_min_FAST_threshold_(orb_min_FAST_threshold)
+FeatureExtractor::FeatureExtractor(const ORBParams & params)
+: params_(params)
 {
-  image_pyramid_scale_ = std::vector<float>(orb_levels_);
+  image_pyramid_scale_ = std::vector<float>(params_.orb_levels);
   image_pyramid_scale_[0] = 1.0;
-  for (int i = 1; i < orb_levels_; i++) {
-    image_pyramid_scale_[i] = orb_scale_factor_ * image_pyramid_scale_[i - 1];
+  for (int i = 1; i < params_.orb_levels; i++) {
+    image_pyramid_scale_[i] = params_.orb_scale_factor * image_pyramid_scale_[i - 1];
   }
 
-  features_per_level_ = std::vector<int>(orb_levels_);
-  float inv_orb_scale_ = float((1.0 / orb_scale_factor_));
+  features_per_level_ = std::vector<int>(params_.orb_levels);
+  float inv_orb_scale_ = float((1.0 / params_.orb_scale_factor));
   // The desired # of features per image is proportional to the image size and
   // must sum up to orb_num_features, so we solve a geometric series.
-  float desired_features_per_scale = orb_num_features_ * (1 - inv_orb_scale_) /
-    (1 - float(std::pow(double(inv_orb_scale_), double(orb_levels_))));
+  float desired_features_per_scale = params_.orb_num_features * (1 - inv_orb_scale_) /
+    (1 - float(std::pow(double(inv_orb_scale_), double(params_.orb_levels))));
   int sum_features = 0;
-  for (int i = 0; i < orb_levels_ - 1; i++) {
+  for (int i = 0; i < params_.orb_levels - 1; i++) {
     features_per_level_[i] = cvRound(desired_features_per_scale);
     sum_features += features_per_level_[i];
     desired_features_per_scale *= inv_orb_scale_;
   }
-  features_per_level_[orb_levels_ - 1] = orb_num_features_ - sum_features;
+  features_per_level_[params_.orb_levels - 1] = params_.orb_num_features - sum_features;
 
   int half_patch_size = PATCH_SIZE / 2;
   chord_size_ = std::vector<int>(half_patch_size + 1, 0);
@@ -122,14 +116,14 @@ void FeatureExtractor::ComputeFeatures(
   auto key_point_pyramid = computeKeyPoints(pyramid);
 
   int num_key_points = 0;
-  for (int level = 0; level < orb_levels_; level++) {
+  for (int level = 0; level < params_.orb_levels; level++) {
     num_key_points += key_point_pyramid[level].size();
   }
-  descriptor_arr.create(num_key_points, 32, CV_8U);
+  descriptor_arr.create(num_key_points, DESCRIPTOR_LEN, CV_8U);
   auto descriptors = descriptor_arr.getMat();
   computeDescriptors(pyramid, key_point_pyramid, descriptors);
 
-  for (int level = 0; level < orb_levels_; level++) {
+  for (int level = 0; level < params_.orb_levels; level++) {
     for (auto & kp:key_point_pyramid[level]) {
       kp.pt *= image_pyramid_scale_[level];
     }
@@ -142,8 +136,8 @@ void FeatureExtractor::ComputeFeatures(
 std::vector<std::vector<cv::KeyPoint>> FeatureExtractor::computeKeyPoints(
   const std::vector<cv::Mat> & pyramid)
 {
-  std::vector<std::vector<cv::KeyPoint>> key_points(orb_levels_);
-  for (int level = 0; level < orb_levels_; level++) {
+  std::vector<std::vector<cv::KeyPoint>> key_points(params_.orb_levels);
+  for (int level = 0; level < params_.orb_levels; level++) {
     RectBounds bounds(
       EDGE_THRESHOLD - FAST_DETECTOR_RADIUS,
       pyramid[level].cols - EDGE_THRESHOLD + FAST_DETECTOR_RADIUS,
@@ -214,8 +208,8 @@ void FeatureExtractor::computeOrientation(
 
 std::vector<cv::Mat> FeatureExtractor::buildImagePyramid(const cv::Mat & image)
 {
-  std::vector<cv::Mat> image_pyramid(orb_levels_);
-  for (int i = 0; i < orb_levels_; i++) {
+  std::vector<cv::Mat> image_pyramid(params_.orb_levels);
+  for (int i = 0; i < params_.orb_levels; i++) {
     auto inv_scale = 1.0 / image_pyramid_scale_[i];
     cv::Size size(cvRound(image.cols * inv_scale), cvRound(image.rows * inv_scale));
     cv::Size full_size(size.width + 2 * EDGE_THRESHOLD, size.height + 2 * EDGE_THRESHOLD);
@@ -339,11 +333,11 @@ std::vector<cv::KeyPoint> FeatureExtractor::computeFASTFeatures(
       std::vector<cv::KeyPoint> key_points_cell;
       cv::FAST(
         image.rowRange(y_offset, y_offset_max).colRange(x_offset, x_offset_max),
-        key_points_cell, orb_initial_FAST_threshold_, true);
+        key_points_cell, params_.orb_initial_FAST_threshold, true);
       if (key_points_cell.empty()) {
         cv::FAST(
           image.rowRange(y_offset, y_offset_max).colRange(x_offset, x_offset_max),
-          key_points_cell, orb_min_FAST_threshold_, true);
+          key_points_cell, params_.orb_min_FAST_threshold, true);
       }
 
       if (!key_points_cell.empty()) {

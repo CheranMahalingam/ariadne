@@ -40,6 +40,15 @@ RUN apt-get update && \
       libopencv-dev && \
     rm -rf /var/lib/apt/lists/*
 
+RUN git clone https://github.com/CheranMahalingam/DBow3.git && \
+    mkdir DBow3/build && \
+    cmake DBow3 -B DBow3/build && \
+    cmake --build DBow3/build && \
+    cp DBow3/build/src/libDBoW3.so /usr/local/lib/ && \
+    mkdir /usr/local/include/DBoW3 && \
+    cp DBow3/src/*.h /usr/local/include/DBoW3/ && \
+    rm -rf DBow3
+
 # Copy cached manifests to install dependencies defined by rosdep keys
 COPY --from=cacher /tmp/opt/ros/overlay_ws /tmp
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
@@ -80,8 +89,7 @@ RUN curl -L https://get.oh-my.fish > install && \
     fish -c "omf install bass" && \
     rm install && \
     git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && \
-    ~/.fzf/install && \
-    wget -P ~ https://github.com/cyrus-and/gdb-dashboard/raw/master/.gdbinit
+    ~/.fzf/install
 
 RUN <<EOF cat>> ~/.config/fish/config.fish
 # Workaround for newer git versions where git verifies that the parent directory

@@ -1,7 +1,7 @@
 #ifndef VSLAM__VSLAM_HPP_
 #define VSLAM__VSLAM_HPP_
 
-#include "tracking/feature_extractor.hpp"
+#include "tracking/tracker.hpp"
 
 #include <opencv2/core.hpp>
 #include <message_filters/subscriber.h>
@@ -31,19 +31,7 @@ private:
     const sensor_msgs::msg::Image::ConstSharedPtr rgb_image,
     const sensor_msgs::msg::Image::ConstSharedPtr depth_image);
 
-  void track(
-    const cv::Mat & rgb, const cv::Mat & depth, rclcpp::Time timestamp);
-
-  // ROS configurable parameters
-  int orb_scale_pyramid_levels_;
-  float orb_pyramid_scale_factor_;
-  int orb_num_features_;
-  int orb_initial_FAST_threshold_;
-  int orb_min_FAST_threshold_;
-  int camera_width_;
-  int camera_height_;
-
-  std::unique_ptr<FeatureExtractor> extractor_;
+  std::unique_ptr<Tracker> tracker_;
 
   message_filters::Subscriber<sensor_msgs::msg::Image> rgb_sub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> depth_sub_;

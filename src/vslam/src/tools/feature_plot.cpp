@@ -20,7 +20,14 @@ void FeaturePlot::Plot()
     }
 
     auto image = cv::imread(dir_entry.path().string(), cv::IMREAD_UNCHANGED);
-    vslam::FeatureExtractor extractor(8, 1.2, 1000, 20, 7);
+    vslam::FeatureExtractor::ORBParams params = {
+      .orb_levels = 8,
+      .orb_scale_factor = 1.2,
+      .orb_num_features = 1000,
+      .orb_initial_FAST_threshold = 20,
+      .orb_min_FAST_threshold = 7,
+    };
+    vslam::FeatureExtractor extractor(params);
 
     std::vector<cv::KeyPoint> key_points;
     cv::Mat descriptors;
@@ -33,7 +40,6 @@ void FeaturePlot::Plot()
 
     auto filename = dir_entry.path().filename().string();
     auto output_path = output_dir_ / filename;
-    std::cout << output_path << "\n";
     cv::imwrite(output_path.string(), image);
   }
 }
