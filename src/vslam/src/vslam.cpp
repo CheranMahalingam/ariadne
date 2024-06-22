@@ -1,5 +1,8 @@
+#include "vslam/camera_utils.hpp"
+#include "vslam/tracking/feature_extractor.hpp"
 #include "vslam/vslam.hpp"
 
+#include "DBoW3/DBoW3.h"
 #include <cv_bridge/cv_bridge.h>
 
 namespace vslam
@@ -13,23 +16,47 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->declare_parameter("orb_num_features", 2000);
   this->declare_parameter("orb_initial_FAST_threshold", 20);
   this->declare_parameter("orb_min_FAST_threshold", 7);
+  this->declare_parameter("camera_fx", 500.0);
+  this->declare_parameter("camera_fy", 500.0);
   this->declare_parameter("camera_width", 1920);
   this->declare_parameter("camera_height", 1080);
+  this->declare_parameter("depth_baseline_mm", 80.0);
+  this->declare_parameter("depth_map_factor", 5000.0);
+  this->declare_parameter("matcher_nn_distance_ratio", 0.7);
 
-  this->get_parameter("orb_scale_pyramid_levels", orb_scale_pyramid_levels_);
-  this->get_parameter("orb_pyramid_scale_factor", orb_pyramid_scale_factor_);
-  this->get_parameter("orb_num_features", orb_num_features_);
-  this->get_parameter("orb_initial_FAST_threshold", orb_initial_FAST_threshold_);
-  this->get_parameter("orb_min_FAST_threshold", orb_min_FAST_threshold_);
-  this->get_parameter("camera_width", camera_width_);
-  this->get_parameter("camera_height", camera_height_);
+  FeatureExtractor::ORBParams fp;
+  this->get_parameter("orb_scale_pyramid_levels", fp.orb_levels);
+  this->get_parameter("orb_pyramid_scale_factor", fp.orb_scale_factor);
+  this->get_parameter("orb_num_features", fp.orb_num_features);
+  this->get_parameter("orb_initial_FAST_threshold", fp.orb_initial_FAST_threshold);
+  this->get_parameter("orb_min_FAST_threshold", fp.orb_min_FAST_threshold);
 
-  extractor_ = std::make_unique<FeatureExtractor>(
-    orb_scale_pyramid_levels_,
-    orb_pyramid_scale_factor_,
-    orb_num_features_,
-    orb_initial_FAST_threshold_,
-    orb_min_FAST_threshold_);
+  CameraParams cp;
+  this->get_parameter("camera_fx", cp.fx);
+  this->get_parameter("camera_fy", cp.fy);
+  this->get_parameter("camera_width", cp.width);
+  this->get_parameter("camera_height", cp.height);
+  this->get_parameter("depth_baseline_mm", cp.depth_baseline);
+
+  double depth_map_factor;
+  this->get_parameter("depth_map_factor", depth_map_factor);
+  float nn_dist_ratio;
+  this->get_parameter("matcher_nn_distance_ratio", nn_dist_ratio);
+
+  std::string vocabulary_path = "data/DBoW3/orbvoc.dbow3";
+  DBoW3::Vocabulary v(vocabulary_path);
+  if (v.empty()) {
+    RCLCPP_ERROR(
+      this->get_logger(),
+      "Unable to parse BoW vocabulary at %s", vocabulary_path.c_str());
+    return;
+  } else {
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Successfully loaded BoW vocabulary from %s", vocabulary_path.c_str());
+  }
+
+  tracker_ = std::make_unique<Tracker>(v, fp, cp, depth_map_factor, nn_dist_ratio);
 
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");
@@ -47,18 +74,7 @@ void VSLAMNode::rgbdImageCallback(
 {
   auto cv_ptr_rgb = cv_bridge::toCvShare(rgb_image);
   auto cv_ptr_depth = cv_bridge::toCvShare(depth_image);
-  track(cv_ptr_rgb->image, cv_ptr_depth->image, cv_ptr_rgb->header.stamp);
-}
-
-void VSLAMNode::track(
-  const cv::Mat & rgb, const cv::Mat & depth, rclcpp::Time timestamp)
-{
-  auto grey = rgb;
-  cv::cvtColor(grey, grey, cv::COLOR_RGB2GRAY);
-
-  std::vector<cv::KeyPoint> key_points;
-  cv::Mat descriptors;
-  extractor_->ComputeFeatures(grey, key_points, descriptors);
+  tracker_->Track(cv_ptr_rgb->image, cv_ptr_depth->image, cv_ptr_rgb->header.stamp);
 }
 
 }  // vslam

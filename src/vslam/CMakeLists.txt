@@ -29,9 +29,19 @@ find_package(rosbag2_cpp REQUIRED)
 
 find_package(OpenCV REQUIRED)
 
+find_library(DBoW3_LIB libDBoW3.so)
+add_library(DBoW3 SHARED IMPORTED)
+set_target_properties(DBoW3 PROPERTIES
+  IMPORTED_LOCATION ${DBoW3_LIB})
+
 add_library(vslam_lib
   src/vslam.cpp
-  src/tracking/feature_extractor.cpp)
+  src/mapping/map.cpp
+  src/tracking/feature_extractor.cpp
+  src/tracking/feature_matcher.cpp
+  src/tracking/frame.cpp
+  src/tracking/key_frame.cpp
+  src/tracking/tracker.cpp)
 target_include_directories(vslam_lib
   PUBLIC
   include
@@ -53,6 +63,7 @@ endif()
 add_executable(vslam_node src/vslam_node.cpp)
 target_link_libraries(vslam_node
   vslam_lib
+  DBoW3
   ${OpenCV_LIBS})
 
 add_executable(tum_rosbag src/tools/tum_rosbag.cpp)

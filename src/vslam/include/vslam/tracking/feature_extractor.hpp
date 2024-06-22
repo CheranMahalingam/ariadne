@@ -11,15 +11,23 @@ namespace vslam
 class FeatureExtractor
 {
 public:
+  struct ORBParams
+  {
+    int orb_levels;
+    float orb_scale_factor;
+    int orb_num_features;
+    int orb_initial_FAST_threshold;
+    int orb_min_FAST_threshold;
+  };
+
   static constexpr int PATCH_SIZE = 31;
   static constexpr int EDGE_THRESHOLD = 19;
   static constexpr int KEY_POINT_CELL_LEN = 30;
   static constexpr int FAST_DETECTOR_RADIUS = 3;
   static constexpr int GAUSSIAN_KERNEL_SIGMA = 2;
+  static constexpr int DESCRIPTOR_LEN = 32;
 
-  FeatureExtractor(
-    int orb_levels, float orb_scale_factor, int orb_num_features,
-    int orb_initial_FAST_threshold, int orb_min_FAST_threshold);
+  FeatureExtractor(const ORBParams & params);
 
   void ComputeFeatures(
     cv::InputArray image_arr, std::vector<cv::KeyPoint> & key_points,
@@ -94,11 +102,7 @@ private:
     const cv::Mat & image, const cv::Point2f & point);
 
   // Tunable ORB keypoint detection parameters.
-  int orb_levels_;
-  float orb_scale_factor_;
-  int orb_num_features_;
-  int orb_initial_FAST_threshold_;
-  int orb_min_FAST_threshold_;
+  ORBParams params_;
 
   // Factor by which the scale of each image has been reduced in the pyramid.
   std::vector<float> image_pyramid_scale_;

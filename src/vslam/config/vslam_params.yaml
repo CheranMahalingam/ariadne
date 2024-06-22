@@ -8,6 +8,19 @@
     orb_min_FAST_threshold: 7
 
     # Camera params
+    camera_fx: 517.306408
+    camera_fy: 516.469215
+    camera_cx: 318.643040
+    camera_cy: 255.313989
+    camera_k1: 0.262383
+    camera_k2: -0.953104
+    camera_p1: -0.005358
+    camera_p2: 0.002628
+    camera_k3: 1.163314
     camera_width: 1920
     camera_height: 1080
+    depth_baseline_mm: 80.0
 
+    depth_map_factor: 5000.0
+
+    matcher_nn_distance_ratio: 0.7
