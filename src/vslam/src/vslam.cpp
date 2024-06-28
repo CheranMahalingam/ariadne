@@ -34,14 +34,14 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   CameraParams cp;
   this->get_parameter("camera_fx", cp.fx);
   this->get_parameter("camera_fy", cp.fy);
+  this->get_parameter("camera_cx", cp.fx);
+  this->get_parameter("camera_cy", cp.fy);
   this->get_parameter("camera_width", cp.width);
   this->get_parameter("camera_height", cp.height);
   this->get_parameter("depth_baseline_mm", cp.depth_baseline);
 
   double depth_map_factor;
   this->get_parameter("depth_map_factor", depth_map_factor);
-  float nn_dist_ratio;
-  this->get_parameter("matcher_nn_distance_ratio", nn_dist_ratio);
 
   std::string vocabulary_path = "data/DBoW3/orbvoc.dbow3";
   DBoW3::Vocabulary v(vocabulary_path);
@@ -56,7 +56,7 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
       "Successfully loaded BoW vocabulary from %s", vocabulary_path.c_str());
   }
 
-  tracker_ = std::make_unique<Tracker>(v, fp, cp, depth_map_factor, nn_dist_ratio);
+  tracker_ = std::make_unique<Tracker>(v, fp, cp, depth_map_factor);
 
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");

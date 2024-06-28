@@ -9,6 +9,8 @@ struct CameraParams
   // Camera intrinsics parameters
   float fx;
   float fy;
+  float cx;
+  float cy;
 
   int width;
   int height;
