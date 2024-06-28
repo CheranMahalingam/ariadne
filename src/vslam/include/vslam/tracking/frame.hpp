@@ -2,7 +2,7 @@
 #define VSLAM__FRAME_HPP_
 
 #include "vslam/camera_utils.hpp"
-#include "vslam/mapping/map.hpp"
+#include "vslam/mapping/map_point.hpp"
 
 #include "DBoW3/DBoW3.h"
 #include <opencv2/core.hpp>
@@ -28,12 +28,21 @@ public:
 
   void ComputeBoW();
 
+  cv::Mat UnprojectToWorldFrame(int point_idx) const;
+
+  void SetPose(cv::Mat pose);
+
+  int GetSize() const;
+  const DBoW3::FeatureVector & GetFeatures() const;
+  const cv::Mat & GetDescriptor(int idx) const;
+  const cv::KeyPoint & GetPoint(int idx) const;
+
+  long int curr_id;
+
 private:
   void populateGrid();
 
   void computeStereo(const cv::Mat & depth);
-
-  long int curr_id_;
 
   std::vector<cv::KeyPoint> key_points_;
   std::vector<float> stereo_key_points_;
@@ -45,6 +54,11 @@ private:
   DBoW3::Vocabulary vocabulary_;
 
   CameraParams camera_params_;
+
+  cv::Mat camera_world_transform_;
+  cv::Mat camera_world_rotation_;
+  cv::Mat camera_world_translation_;
+  cv::Mat world_pos_;
 
   std::vector<MapPoint> points_;
   std::vector<std::vector<std::vector<int>>> frame_grid_;

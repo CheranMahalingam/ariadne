@@ -8,7 +8,8 @@ class FeaturePlot
 public:
   FeaturePlot(std::string input_dir, std::string output_dir);
 
-  void Plot();
+  void PlotFeatures();
+  void PlotMatches();
 
 private:
   std::filesystem::path input_dir_;

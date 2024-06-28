@@ -10,13 +10,13 @@ Frame::Frame(
   const std::vector<cv::KeyPoint> & key_points, const cv::Mat & descriptors,
   const DBoW3::Vocabulary & vocabulary,
   const CameraParams & camera_params)
-: key_points_(key_points),
+: curr_id(frame_id),
+  key_points_(key_points),
   stereo_key_points_(std::vector<float>(key_points.size())),
   key_point_depth_(std::vector<float>(key_points.size())),
   vocabulary_(vocabulary),
   camera_params_(camera_params)
 {
-  curr_id_ = frame_id;
   frame_id++;
 
   descriptors_ = std::vector<cv::Mat>(key_points.size());
@@ -36,6 +36,45 @@ Frame::Frame(
 void Frame::ComputeBoW()
 {
   vocabulary_.transform(descriptors_, bow_vector_, feat_vector_, BOW_LEVELS);
+}
+
+cv::Mat Frame::UnprojectToWorldFrame(int point_idx) const
+{
+  float z = key_point_depth_[point_idx];
+  float u = key_points_[point_idx].pt.x;
+  float v = key_points_[point_idx].pt.y;
+  float x = (u - camera_params_.cx) * z / camera_params_.fx;
+  float y = (v - camera_params_.cy) * z / camera_params_.fy;
+  cv::Mat camera_pos = (cv::Mat_<float>(3, 1) << x, y, z);
+  return camera_world_rotation_.t() * camera_pos + world_pos_;
+}
+
+void Frame::SetPose(cv::Mat pose)
+{
+  camera_world_transform_ = pose;
+  camera_world_rotation_ = camera_world_transform_.rowRange(0, 3).colRange(0, 3);
+  camera_world_translation_ = camera_world_transform_.rowRange(0, 3).col(3);
+  world_pos_ = -camera_world_rotation_.t() * camera_world_translation_;
+}
+
+int Frame::GetSize() const
+{
+  return int(key_points_.size());
+}
+
+const DBoW3::FeatureVector & Frame::GetFeatures() const
+{
+  return feat_vector_;
+}
+
+const cv::Mat & Frame::GetDescriptor(int idx) const
+{
+  return descriptors_[idx];
+}
+
+const cv::KeyPoint & Frame::GetPoint(int idx) const
+{
+  return key_points_[idx];
 }
 
 void Frame::populateGrid()

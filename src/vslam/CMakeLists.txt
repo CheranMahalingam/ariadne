@@ -37,6 +37,7 @@ set_target_properties(DBoW3 PROPERTIES
 add_library(vslam_lib
   src/vslam.cpp
   src/mapping/map.cpp
+  src/mapping/map_point.cpp
   src/tracking/feature_extractor.cpp
   src/tracking/feature_matcher.cpp
   src/tracking/frame.cpp
