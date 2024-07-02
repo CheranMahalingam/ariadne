@@ -1,8 +1,6 @@
 #ifndef VSLAM__VSLAM_HPP_
 #define VSLAM__VSLAM_HPP_
 
-#include "tracking/tracker.hpp"
-
 #include <opencv2/core.hpp>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
@@ -14,10 +12,13 @@
 
 namespace vslam
 {
+
 namespace sync_policies = message_filters::sync_policies;
 
 using ApproximateTimeSyncPolicy = message_filters::Synchronizer<sync_policies::ApproximateTime<sensor_msgs::msg::Image,
     sensor_msgs::msg::Image>>;
+
+class Tracker;
 
 class VSLAMNode : public rclcpp::Node
 {
@@ -25,6 +26,7 @@ public:
   static constexpr int MAX_QUEUE_SIZE = 10;
 
   VSLAMNode(const rclcpp::NodeOptions & options);
+  ~VSLAMNode();
 
 private:
   void rgbdImageCallback(

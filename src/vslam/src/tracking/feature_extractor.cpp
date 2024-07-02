@@ -61,12 +61,11 @@ void FeatureExtractor::QuadTreeNode::Split(
 FeatureExtractor::FeatureExtractor(const ORBParams & params)
 : params_(params)
 {
-  image_pyramid_scale_ = std::vector<float>(params_.orb_levels);
+  image_pyramid_scale_ = std::vector<float>(params.orb_levels);
   image_pyramid_scale_[0] = 1.0;
-  for (int i = 1; i < params_.orb_levels; i++) {
-    image_pyramid_scale_[i] = params_.orb_scale_factor * image_pyramid_scale_[i - 1];
+  for (int i = 1; i < params.orb_levels; i++) {
+    image_pyramid_scale_[i] = params.orb_scale_factor * image_pyramid_scale_[i - 1];
   }
-
   features_per_level_ = std::vector<int>(params_.orb_levels);
   float inv_orb_scale_ = float((1.0 / params_.orb_scale_factor));
   // The desired # of features per image is proportional to the image size and
@@ -131,6 +130,11 @@ void FeatureExtractor::ComputeFeatures(
       key_points.end(),
       key_point_pyramid[level].begin(), key_point_pyramid[level].end());
   }
+}
+
+const std::vector<float> & FeatureExtractor::GetScaleFactors() const
+{
+  return image_pyramid_scale_;
 }
 
 std::vector<std::vector<cv::KeyPoint>> FeatureExtractor::computeKeyPoints(

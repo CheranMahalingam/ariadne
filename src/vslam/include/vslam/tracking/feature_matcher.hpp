@@ -1,16 +1,19 @@
 #ifndef VSLAM__FEATURE_MATCHER_HPP_
 #define VSLAM__FEATURE_MATCHER_HPP_
 
-#include "vslam/mapping/map_point.hpp"
 #include "vslam/tracking/frame.hpp"
 #include "vslam/tracking/key_frame.hpp"
 
 #include <opencv2/core.hpp>
 
+#include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace vslam
 {
+
+class MapPoint;
 
 class FeatureMatcher
 {
@@ -23,19 +26,27 @@ public:
 
   int BoWSearch(
     const KeyFrame & key_frame, const Frame & curr_frame,
-    std::vector<MapPoint> & matching_points);
+    std::vector<std::shared_ptr<MapPoint>> & matching_points) const;
 
   int ProjectionSearch(
-    const Frame & curr_frame, std::vector<MapPoint> & matching_points);
+    Frame & curr_frame, const Frame & prev_frame,
+    int search_radius_threshold) const;
 
 private:
-  void findMatch(
+  void findMatchBoW(
     const KeyFrame & key_frame, const Frame & curr_frame,
     const std::vector<unsigned int> & kf_descriptors,
     const std::vector<unsigned int> & curr_descriptors,
-    std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram);
+    std::unordered_map<int, int> & visited_matches,
+    std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram) const;
 
-  int hammingDistance(const cv::Mat & a, const cv::Mat & b);
+  int applyHistogramFilter(
+    const std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram,
+    const std::unordered_map<int, int> & visited_matches,
+    const std::vector<std::shared_ptr<MapPoint>> & prev_map_points,
+    std::vector<std::shared_ptr<MapPoint>> & curr_map_points) const;
+
+  int hammingDistance(const cv::Mat & a, const cv::Mat & b) const;
 
   float nn_dist_ratio_;
 };
