@@ -1,15 +1,15 @@
 #ifndef VSLAM__MAP_HPP_
 #define VSLAM__MAP_HPP_
 
-#include "vslam/mapping/map_point.hpp"
-#include "vslam/tracking/key_frame.hpp"
-
 #include <memory>
 #include <set>
 #include <vector>
 
 namespace vslam
 {
+
+class KeyFrame;
+class MapPoint;
 
 class Map
 {

@@ -15,8 +15,10 @@ struct CameraParams
   int width;
   int height;
 
+  float depth_threshold;
   // Distance between IR distance sensor and camera in mm.
   float depth_baseline;
+  float depth_map_factor;
 };
 
 }  // vslam

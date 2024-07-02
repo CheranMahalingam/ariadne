@@ -1,5 +1,6 @@
 #include "vslam/camera_utils.hpp"
 #include "vslam/tracking/feature_extractor.hpp"
+#include "vslam/tracking/tracker.hpp"
 #include "vslam/vslam.hpp"
 
 #include "DBoW3/DBoW3.h"
@@ -20,9 +21,9 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->declare_parameter("camera_fy", 500.0);
   this->declare_parameter("camera_width", 1920);
   this->declare_parameter("camera_height", 1080);
-  this->declare_parameter("depth_baseline_mm", 80.0);
-  this->declare_parameter("depth_map_factor", 5000.0);
-  this->declare_parameter("matcher_nn_distance_ratio", 0.7);
+  this->declare_parameter("camera_depth_threshold", 40.0);
+  this->declare_parameter("camera_depth_baseline_mm", 40.0);
+  this->declare_parameter("camera_depth_map_factor", 5000.0);
 
   FeatureExtractor::ORBParams fp;
   this->get_parameter("orb_scale_pyramid_levels", fp.orb_levels);
@@ -38,10 +39,9 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->get_parameter("camera_cy", cp.fy);
   this->get_parameter("camera_width", cp.width);
   this->get_parameter("camera_height", cp.height);
-  this->get_parameter("depth_baseline_mm", cp.depth_baseline);
-
-  double depth_map_factor;
-  this->get_parameter("depth_map_factor", depth_map_factor);
+  this->get_parameter("camera_depth_threshold", cp.depth_threshold);
+  this->get_parameter("camera_depth_baseline_mm", cp.depth_baseline);
+  this->get_parameter("camera_depth_map_factor", cp.depth_map_factor);
 
   std::string vocabulary_path = "data/DBoW3/orbvoc.dbow3";
   DBoW3::Vocabulary v(vocabulary_path);
@@ -56,7 +56,7 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
       "Successfully loaded BoW vocabulary from %s", vocabulary_path.c_str());
   }
 
-  tracker_ = std::make_unique<Tracker>(v, fp, cp, depth_map_factor);
+  tracker_ = std::make_unique<Tracker>(v, fp, cp);
 
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");
@@ -67,6 +67,8 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
       &VSLAMNode::rgbdImageCallback, this,
       std::placeholders::_1, std::placeholders::_2));
 }
+
+VSLAMNode::~VSLAMNode() = default;
 
 void VSLAMNode::rgbdImageCallback(
   const sensor_msgs::msg::Image::ConstSharedPtr rgb_image,

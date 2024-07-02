@@ -33,6 +33,8 @@ public:
     cv::InputArray image_arr, std::vector<cv::KeyPoint> & key_points,
     cv::OutputArray descriptors);
 
+  const std::vector<float> & GetScaleFactors() const;
+
 private:
   struct RectBounds
   {

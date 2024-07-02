@@ -2,7 +2,6 @@
 #define VSLAM__FRAME_HPP_
 
 #include "vslam/camera_utils.hpp"
-#include "vslam/mapping/map_point.hpp"
 
 #include "DBoW3/DBoW3.h"
 #include <opencv2/core.hpp>
@@ -13,55 +12,64 @@
 namespace vslam
 {
 
+class KeyFrame;
+class MapPoint;
+
 class Frame
 {
 public:
   static constexpr int BOW_LEVELS = 4;
+  static constexpr int FRAME_GRID_SIZE = 10;
 
   static long int frame_id;
 
+  Frame(const Frame & frame);
+
   Frame(
     const cv::Mat & grey, const cv::Mat & depth, rclcpp::Time timestamp,
-    const std::vector<cv::KeyPoint> & key_points, const cv::Mat & descriptors,
+    const std::vector<cv::KeyPoint> & key_points, const cv::Mat & desc,
     const DBoW3::Vocabulary & vocabulary,
+    const std::vector<float> & scale_factors,
     const CameraParams & camera_params);
 
   void ComputeBoW();
 
   cv::Mat UnprojectToWorldFrame(int point_idx) const;
 
+  std::vector<int> FindNeighbourFeatures(float x, float y, float radius) const;
+
   void SetPose(cv::Mat pose);
 
-  int GetSize() const;
-  const DBoW3::FeatureVector & GetFeatures() const;
-  const cv::Mat & GetDescriptor(int idx) const;
-  const cv::KeyPoint & GetPoint(int idx) const;
-
   long int curr_id;
+
+  CameraParams camera_params;
+
+  std::vector<cv::KeyPoint> key_points;
+  std::vector<float> stereo_key_points;
+  std::vector<float> depth_points;
+  std::vector<cv::Mat> descriptors;
+
+  cv::Mat camera_world_transform;
+  cv::Mat camera_world_rotation;
+  cv::Mat camera_world_translation;
+  cv::Mat world_pos;
+
+  DBoW3::BowVector bow_vector;
+  DBoW3::FeatureVector feat_vector;
+  DBoW3::Vocabulary vocabulary;
+
+  std::vector<float> image_scale_factors;
+
+  std::shared_ptr<KeyFrame> kf_ref;
+
+  std::vector<std::shared_ptr<MapPoint>> map_points;
+
+  std::vector<std::vector<std::vector<int>>> frame_grid;
 
 private:
   void populateGrid();
 
   void computeStereo(const cv::Mat & depth);
-
-  std::vector<cv::KeyPoint> key_points_;
-  std::vector<float> stereo_key_points_;
-  std::vector<float> key_point_depth_;
-  std::vector<cv::Mat> descriptors_;
-
-  DBoW3::BowVector bow_vector_;
-  DBoW3::FeatureVector feat_vector_;
-  DBoW3::Vocabulary vocabulary_;
-
-  CameraParams camera_params_;
-
-  cv::Mat camera_world_transform_;
-  cv::Mat camera_world_rotation_;
-  cv::Mat camera_world_translation_;
-  cv::Mat world_pos_;
-
-  std::vector<MapPoint> points_;
-  std::vector<std::vector<std::vector<int>>> frame_grid_;
 };
 
 }  // vslam

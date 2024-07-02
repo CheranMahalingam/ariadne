@@ -1,4 +1,6 @@
 #include "vslam/mapping/map.hpp"
+#include "vslam/mapping/map_point.hpp"
+#include "vslam/tracking/key_frame.hpp"
 
 namespace vslam
 {
