@@ -7,15 +7,19 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include <ranges>
+
 namespace vslam
 {
 
 Tracker::Tracker(
+  std::shared_ptr<Map> map,
   const DBoW3::Vocabulary & vocabulary,
   const FeatureExtractor::ORBParams & orb_params,
   const CameraParams & camera_params)
 : camera_params_(camera_params),
   vocabulary_(vocabulary),
+  map_(map),
   state_(SLAMState::INITIALIZING)
 {
   extractor_ = std::make_unique<FeatureExtractor>(orb_params);
@@ -69,9 +73,15 @@ void Tracker::Track(
       } else {
         velocity_ = cv::Mat();
       }
+
+      if (keyFrameInclusionHeuristic()) {
+        insertKeyFrame();
+      }
     }
 
-    curr_frame_->kf_ref = kf_;
+    if (curr_frame_->kf_ref == nullptr) {
+      curr_frame_->kf_ref = kf_;
+    }
     prev_frame_ = std::make_shared<Frame>(*curr_frame_);
   }
 
@@ -95,16 +105,12 @@ void Tracker::initializePose()
   map_->AddKeyFrame(kf_);
 
   for (int i = 0; i < int(curr_frame_->key_points.size()); i++) {
-    auto world_pos = curr_frame_->UnprojectToWorldFrame(i);
-    std::shared_ptr<MapPoint> new_map_point = std::make_shared<MapPoint>(
-      world_pos, kf_, map_);
-    kf_->AddMapPoint(new_map_point, i);
-    curr_frame_->map_points[i] = new_map_point;
-    map_->AddMapPoint(new_map_point);
+    createNewMapPoint(i);
   }
 
   prev_frame_ = std::make_shared<Frame>(*curr_frame_);
   prev_kf_id_ = curr_frame_->curr_id;
+  map_->origin = kf_;
 
   state_ = SLAMState::HEALTHY;
 }
@@ -151,6 +157,66 @@ bool Tracker::trackUsingReferenceFrame()
   curr_frame_->SetPose(prev_frame_->camera_world_transform);
 
   return true;
+}
+
+bool Tracker::keyFrameInclusionHeuristic()
+{
+  int key_frame_count = map_->GetKeyFrameCount();
+  if (key_frame_count >= camera_params_.fps) {
+    return false;
+  }
+
+  int tracked_close_points = 0;
+  int non_tracked_close_points = 0;
+
+  /**
+   * Condition 1a: More than 20 frames have passed since the last global
+   * relocalization.
+   * Condition 1b: Local mapping is idle and more than 20 frames have passes
+   * since the last key frame insertion.
+   * Condition 1c: Too few close points are being tracked.
+   */
+  return false;
+}
+
+void Tracker::insertKeyFrame()
+{
+  kf_ = std::make_shared<KeyFrame>(*curr_frame_, map_);
+  curr_frame_->kf_ref = kf_;
+
+  std::vector<std::pair<int, int>> depths;
+  for (int i = 0; i < int(curr_frame_->depth_points.size()); i++) {
+    depths.push_back(std::pair(curr_frame_->depth_points[i], i));
+  }
+  std::ranges::sort(depths);
+
+  int close_points = 0;
+  for (auto [dist, idx]:depths) {
+    auto map_point = curr_frame_->map_points[idx];
+    if (map_point == nullptr) {
+      createNewMapPoint(idx);
+    }
+    close_points++;
+
+    if (close_points >= MIN_CLOSE_MAP_POINTS && \
+      dist > camera_params_.depth_threshold)
+    {
+      break;
+    }
+  }
+
+  prev_kf_id_ = curr_frame_->curr_id;
+}
+
+void Tracker::createNewMapPoint(int point_idx)
+{
+  auto world_pos = curr_frame_->UnprojectToWorldFrame(point_idx);
+  auto new_map_point = std::make_shared<MapPoint>(
+    world_pos, kf_, map_);
+  new_map_point->AddObservation(kf_, point_idx);
+  kf_->AddMapPoint(new_map_point, point_idx);
+  map_->AddMapPoint(new_map_point);
+  curr_frame_->map_points[point_idx] = new_map_point;
 }
 
 }  // vslam

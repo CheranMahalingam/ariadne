@@ -33,17 +33,8 @@ public:
     int search_radius_threshold) const;
 
 private:
-  void findMatchBoW(
-    const KeyFrame & key_frame, const Frame & curr_frame,
-    const std::vector<unsigned int> & kf_descriptors,
-    const std::vector<unsigned int> & curr_descriptors,
-    std::unordered_map<int, int> & visited_matches,
-    std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram) const;
-
   int applyHistogramFilter(
     const std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram,
-    const std::unordered_map<int, int> & visited_matches,
-    const std::vector<std::shared_ptr<MapPoint>> & prev_map_points,
     std::vector<std::shared_ptr<MapPoint>> & curr_map_points) const;
 
   int hammingDistance(const cv::Mat & a, const cv::Mat & b) const;

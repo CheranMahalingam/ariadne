@@ -20,7 +20,6 @@ int FeatureMatcher::BoWSearch(
   std::vector<std::shared_ptr<MapPoint>> & matching_points) const
 {
   std::array<std::vector<int>, HISTOGRAM_BINS> rotation_histogram;
-  std::unordered_map<int, int> visited_matches;
   const auto & kf_map_points = key_frame.GetMapPoints();
   const auto & curr_feature_map = curr_frame.feat_vector;
   const auto & kf_feature_map = key_frame.feat_vector;
@@ -31,9 +30,46 @@ int FeatureMatcher::BoWSearch(
     const auto [curr_id, curr_features] = *f_it;
     const auto [kf_id, kf_features] = *kf_it;
     if (curr_id == kf_id) {
-      findMatchBoW(
-        key_frame, curr_frame, kf_features, curr_features, visited_matches,
-        rotation_histogram);
+      for (auto kf_idx:kf_features) {
+        if (kf_map_points[kf_idx] == nullptr || kf_map_points[kf_idx]->Culled()) {
+          continue;
+        }
+
+        auto kf_desc = key_frame.descriptors[kf_idx];
+
+        int min_distance_idx = -1;
+        int min_distance_1 = 256;
+        int min_distance_2 = 256;
+        for (auto curr_idx:curr_features) {
+          if (matching_points[curr_idx] != nullptr) {
+            continue;
+          }
+
+          auto curr_desc = curr_frame.descriptors[curr_idx];
+          auto dist = hammingDistance(kf_desc, curr_desc);
+          if (dist < min_distance_1) {
+            min_distance_idx = curr_idx;
+            min_distance_2 = min_distance_1;
+            min_distance_1 = dist;
+          } else if (dist < min_distance_2) {
+            min_distance_2 = dist;
+          }
+        }
+
+        if (min_distance_1 <= MIN_DISTANCE_THRESHOLD &&
+          min_distance_1 * nn_dist_ratio_ > min_distance_2)
+        {
+          matching_points[min_distance_idx] = kf_map_points[kf_idx];
+          float rotation = key_frame.key_points[kf_idx].angle - \
+            curr_frame.key_points[min_distance_idx].angle;
+          if (rotation < 0.0) {
+            rotation += 360.0;
+          }
+          int bin = int((rotation - 1) * HISTOGRAM_BINS / 360.0);
+          rotation_histogram[bin].push_back(min_distance_idx);
+        }
+      }
+
       f_it++;
       kf_it++;
     } else if (curr_id < kf_id) {
@@ -43,9 +79,7 @@ int FeatureMatcher::BoWSearch(
     }
   }
 
-  int matches = applyHistogramFilter(
-    rotation_histogram, visited_matches, kf_map_points, matching_points);
-  return matches;
+  return applyHistogramFilter(rotation_histogram, matching_points);
 }
 
 int FeatureMatcher::ProjectionSearch(
@@ -53,8 +87,6 @@ int FeatureMatcher::ProjectionSearch(
   int search_radius_threshold) const
 {
   std::array<std::vector<int>, HISTOGRAM_BINS> rotation_histogram;
-  std::unordered_map<int, int> visited_matches;
-
   cv::Mat curr_rotation = curr_frame.camera_world_transform.rowRange(0, 3).colRange(0, 3);
   cv::Mat curr_translation = curr_frame.camera_world_transform.rowRange(0, 3).col(3);
   // cv::Mat prev_rotation = prev_frame.camera_world_transform.rowRange(0, 3).colRange(0, 3);
@@ -62,7 +94,7 @@ int FeatureMatcher::ProjectionSearch(
 
   for (int i = 0; i < int(prev_frame.key_points.size()); i++) {
     auto map_point = prev_frame.map_points[i];
-    if (map_point == nullptr) {
+    if (map_point == nullptr || map_point->Culled()) {
       continue;
     }
 
@@ -96,8 +128,17 @@ int FeatureMatcher::ProjectionSearch(
     int min_distance = 256;
     int min_distance_idx = -1;
     for (auto feature_idx:neighbour_features) {
-      if (visited_matches.find(feature_idx) != visited_matches.end()) {
+      if (curr_frame.map_points[feature_idx] != nullptr) {
         continue;
+      }
+
+      if (curr_frame.stereo_key_points[feature_idx] > 0) {
+        float bf = curr_frame.camera_params.fx * \
+          curr_frame.camera_params.depth_baseline / 1000.0;
+        float u_stereo = u - bf / camera_z;
+        if (std::abs(u_stereo - curr_frame.depth_points[feature_idx]) > radius) {
+          continue;
+        }
       }
 
       cv::Mat curr_descriptor = curr_frame.descriptors[feature_idx];
@@ -109,6 +150,7 @@ int FeatureMatcher::ProjectionSearch(
     }
 
     if (min_distance <= MIN_DISTANCE_THRESHOLD) {
+      curr_frame.map_points[min_distance_idx] = map_point;
       float rotation = prev_frame.key_points[i].angle - \
         curr_frame.key_points[min_distance_idx].angle;
       if (rotation < 0.0) {
@@ -116,66 +158,14 @@ int FeatureMatcher::ProjectionSearch(
       }
       int bin = int((rotation - 1) * HISTOGRAM_BINS / 360.0);
       rotation_histogram[bin].push_back(min_distance_idx);
-
-      visited_matches[min_distance_idx] = i;
     }
   }
 
-  int matches = applyHistogramFilter(
-    rotation_histogram, visited_matches,
-    prev_frame.map_points, curr_frame.map_points);
-  return matches;
-}
-
-void FeatureMatcher::findMatchBoW(
-  const KeyFrame & key_frame, const Frame & curr_frame,
-  const std::vector<unsigned int> & kf_descriptors,
-  const std::vector<unsigned int> & curr_descriptors,
-  std::unordered_map<int, int> & visited_matches,
-  std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram) const
-{
-  for (auto kf_idx:kf_descriptors) {
-    auto kf_desc = key_frame.descriptors[kf_idx];
-
-    int min_distance_idx = -1;
-    int min_distance_1 = 256;
-    int min_distance_2 = 256;
-    for (auto curr_idx:curr_descriptors) {
-      if (visited_matches.find(curr_idx) != visited_matches.end()) {
-        continue;
-      }
-
-      auto curr_desc = curr_frame.descriptors[curr_idx];
-      auto dist = hammingDistance(kf_desc, curr_desc);
-      if (dist < min_distance_1) {
-        min_distance_idx = curr_idx;
-        min_distance_2 = min_distance_1;
-        min_distance_1 = dist;
-      } else if (dist < min_distance_2) {
-        min_distance_2 = dist;
-      }
-    }
-
-    if (min_distance_1 <= MIN_DISTANCE_THRESHOLD &&
-      min_distance_1 * nn_dist_ratio_ > min_distance_2)
-    {
-      float rotation = key_frame.key_points[kf_idx].angle - \
-        curr_frame.key_points[min_distance_idx].angle;
-      if (rotation < 0.0) {
-        rotation += 360.0;
-      }
-      int bin = int((rotation - 1) * HISTOGRAM_BINS / 360.0);
-      rotation_histogram[bin].push_back(min_distance_idx);
-
-      visited_matches[min_distance_idx] = kf_idx;
-    }
-  }
+  return applyHistogramFilter(rotation_histogram, curr_frame.map_points);
 }
 
 int FeatureMatcher::applyHistogramFilter(
   const std::array<std::vector<int>, HISTOGRAM_BINS> & rotation_histogram,
-  const std::unordered_map<int, int> & visited_matches,
-  const std::vector<std::shared_ptr<MapPoint>> & prev_map_points,
   std::vector<std::shared_ptr<MapPoint>> & curr_map_points) const
 {
   std::array<std::pair<int, int>, HISTOGRAM_BINS> bin_sizes;
@@ -184,16 +174,15 @@ int FeatureMatcher::applyHistogramFilter(
   }
   std::ranges::sort(bin_sizes, std::ranges::greater());
 
-  int matches = 0;
-  for (int i = 0; i < FILTERED_ORIENTATION_BINS; i++) {
+  int matches = bin_sizes[0].first;
+  for (int i = 1; i < HISTOGRAM_BINS; i++) {
     auto [size, bin] = bin_sizes[i];
-    if (i > 0 && size < 0.1 * bin_sizes[0].first) {
-      break;
+    if (i < FILTERED_ORIENTATION_BINS && size > 0.1 * bin_sizes[0].first) {
+      matches += size;
+      continue;
     }
     for (auto point_idx:rotation_histogram[bin]) {
-      const auto prev_idx = visited_matches.at(point_idx);
-      curr_map_points[point_idx] = prev_map_points[prev_idx];
-      matches++;
+      curr_map_points[point_idx] = nullptr;
     }
   }
   return matches;

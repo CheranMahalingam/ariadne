@@ -42,7 +42,7 @@ Frame::Frame(
   depth_points(std::vector<float>(key_points.size())),
   descriptors(std::vector<cv::Mat>(key_points.size())),
   vocabulary(vocabulary),
-  image_scale_factors(image_scale_factors),
+  image_scale_factors(scale_factors),
   map_points(std::vector<std::shared_ptr<MapPoint>>(key_points.size()))
 {
   frame_id++;
@@ -50,7 +50,6 @@ Frame::Frame(
   for (int i = 0; i < int(key_points.size()); i++) {
     descriptors.push_back(desc.row(i));
   }
-
   // TODO: Undistort key points using camera matrix.
 
   computeStereo(depth);
@@ -134,8 +133,8 @@ void Frame::computeStereo(const cv::Mat & depth)
     float d = depth.at<float>(kp.pt.y, kp.pt.x);
     assert(d > 0);
     depth_points[i] = d;
-    float fx_mm = camera_params.fx / 1000;
-    stereo_key_points[i] = kp.pt.x - fx_mm * camera_params.depth_baseline / d;
+    float bf = camera_params.fx * camera_params.depth_baseline / 1000.0;
+    stereo_key_points[i] = kp.pt.x - bf / d;
   }
 }
 

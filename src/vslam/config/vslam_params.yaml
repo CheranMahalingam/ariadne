@@ -19,6 +19,7 @@
     camera_k3: 1.163314
     camera_width: 640
     camera_height: 480
+    camera_fps: 30
     camera_depth_threshold: 40.0
-    camera_depth_baseline_mm: 40.0
+    camera_depth_baseline_mm: 80.0
     camera_depth_map_factor: 5000.0
