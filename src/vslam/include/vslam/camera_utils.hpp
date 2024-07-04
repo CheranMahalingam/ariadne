@@ -15,6 +15,8 @@ struct CameraParams
   int width;
   int height;
 
+  int fps;
+
   float depth_threshold;
   // Distance between IR distance sensor and camera in mm.
   float depth_baseline;

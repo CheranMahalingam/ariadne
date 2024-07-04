@@ -1,4 +1,5 @@
 #include "vslam/camera_utils.hpp"
+#include "vslam/mapping/map.hpp"
 #include "vslam/tracking/feature_extractor.hpp"
 #include "vslam/tracking/tracker.hpp"
 #include "vslam/vslam.hpp"
@@ -21,6 +22,7 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->declare_parameter("camera_fy", 500.0);
   this->declare_parameter("camera_width", 1920);
   this->declare_parameter("camera_height", 1080);
+  this->declare_parameter("camera_fps", 30);
   this->declare_parameter("camera_depth_threshold", 40.0);
   this->declare_parameter("camera_depth_baseline_mm", 40.0);
   this->declare_parameter("camera_depth_map_factor", 5000.0);
@@ -39,6 +41,7 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->get_parameter("camera_cy", cp.fy);
   this->get_parameter("camera_width", cp.width);
   this->get_parameter("camera_height", cp.height);
+  this->get_parameter("camera_fps", cp.fps);
   this->get_parameter("camera_depth_threshold", cp.depth_threshold);
   this->get_parameter("camera_depth_baseline_mm", cp.depth_baseline);
   this->get_parameter("camera_depth_map_factor", cp.depth_map_factor);
@@ -56,7 +59,9 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
       "Successfully loaded BoW vocabulary from %s", vocabulary_path.c_str());
   }
 
-  tracker_ = std::make_unique<Tracker>(v, fp, cp);
+  auto map = std::make_shared<Map>();
+
+  tracker_ = std::make_unique<Tracker>(map, v, fp, cp);
 
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");

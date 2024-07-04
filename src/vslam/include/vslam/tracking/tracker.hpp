@@ -26,11 +26,13 @@ public:
   };
 
   static constexpr int MIN_POINTS_POSE_INIT = 500;
+  static constexpr int MIN_CLOSE_MAP_POINTS = 100;
   static constexpr int MIN_MATCHING_POINTS_BOW = 15;
   static constexpr int MIN_MATCHING_POINTS_PROJECTION = 20;
   static constexpr int PROJECTION_SEARCH_RADIUS = 15;
 
   Tracker(
+    std::shared_ptr<Map> map,
     const DBoW3::Vocabulary & vocabulary,
     const FeatureExtractor::ORBParams & orb_params,
     const CameraParams & camera_params);
@@ -47,6 +49,11 @@ private:
 
   bool trackUsingMotionModel();
   bool trackUsingReferenceFrame();
+
+  bool keyFrameInclusionHeuristic();
+  void insertKeyFrame();
+
+  void createNewMapPoint(int point_idx);
 
   CameraParams camera_params_;
 
