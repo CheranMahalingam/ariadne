@@ -29,11 +29,6 @@ void Map::EraseMapPoint(std::shared_ptr<MapPoint> mp)
   visited_map_points_.erase(mp);
 }
 
-void Map::SetReferenceMapPoints(const std::vector<std::shared_ptr<MapPoint>> & map_points)
-{
-  local_map_points_ = map_points;
-}
-
 int Map::GetKeyFrameCount() const
 {
   return visited_key_frames_.size();

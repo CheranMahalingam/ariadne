@@ -1,3 +1,4 @@
+#include "vslam/mapping/local_mapper.hpp"
 #include "vslam/mapping/map.hpp"
 #include "vslam/mapping/map_point.hpp"
 #include "vslam/tracking/frame.hpp"
@@ -7,20 +8,24 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include <map>
 #include <ranges>
 
 namespace vslam
 {
 
 Tracker::Tracker(
+  LocalMapper * local_mapper,
   std::shared_ptr<Map> map,
   const DBoW3::Vocabulary & vocabulary,
   const FeatureExtractor::ORBParams & orb_params,
   const CameraParams & camera_params)
 : camera_params_(camera_params),
   vocabulary_(vocabulary),
+  local_matching_inliers_(0),
   map_(map),
-  state_(SLAMState::INITIALIZING)
+  state_(SLAMState::INITIALIZING),
+  local_mapper_(local_mapper)
 {
   extractor_ = std::make_unique<FeatureExtractor>(orb_params);
 }
@@ -40,8 +45,8 @@ void Tracker::Track(
   extractor_->ComputeFeatures(grey, key_points, descriptors);
 
   curr_frame_ = std::make_shared<Frame>(
-    grey, depth, timestamp, key_points, descriptors, vocabulary_,
-    extractor_->GetScaleFactors(), camera_params_);
+    depth, timestamp, key_points, descriptors,
+    extractor_.get(), vocabulary_, camera_params_);
 
   if (state_ == SLAMState::INITIALIZING) {
     if (key_points.size() >= MIN_POINTS_POSE_INIT) {
@@ -57,19 +62,12 @@ void Tracker::Track(
     } else {
       ok = trackUsingMotionModel();
     }
-    if (!ok) {
-      state_ = SLAMState::LOST;
-    } else {
-      state_ = SLAMState::HEALTHY;
-    }
+
+    ok = trackLocalMap();
 
     if (ok) {
-      if (!prev_frame_->camera_world_transform.empty()) {
-        cv::Mat prev_pose = cv::Mat::eye(4, 4, CV_32F);
-        cv::Mat world_camera_rotation = prev_frame_->camera_world_rotation.t();
-        world_camera_rotation.copyTo(prev_pose.rowRange(0, 3).colRange(0, 3));
-        prev_frame_->world_pos.copyTo(prev_pose.rowRange(0, 3).col(3));
-        velocity_ = curr_frame_->camera_world_transform * prev_pose;
+      if (prev_frame_->pose.initialized) {
+        velocity_ = curr_frame_->pose.transform_cw * prev_frame_->pose.transform_wc;
       } else {
         velocity_ = cv::Mat();
       }
@@ -79,16 +77,22 @@ void Tracker::Track(
       }
     }
 
+    if (!ok) {
+      state_ = SLAMState::LOST;
+    } else {
+      state_ = SLAMState::HEALTHY;
+    }
+
     if (curr_frame_->kf_ref == nullptr) {
       curr_frame_->kf_ref = kf_;
     }
     prev_frame_ = std::make_shared<Frame>(*curr_frame_);
   }
 
-  if (!curr_frame_->camera_world_transform.empty()) {
-    cv::Mat camera_ref_transform = curr_frame_->camera_world_transform * \
-      curr_frame_->kf_ref->GetPoseInverse();
-    pose_history.push_back(camera_ref_transform);
+  if (curr_frame_->pose.initialized) {
+    cv::Mat kf_relative_transform = (curr_frame_->pose.transform_cw *
+      curr_frame_->kf_ref->GetPoseInverse());
+    pose_history.push_back(kf_relative_transform);
     frame_history.push_back(kf_);
   } else {
     pose_history.push_back(pose_history.back());
@@ -108,6 +112,8 @@ void Tracker::initializePose()
     createNewMapPoint(i);
   }
 
+  local_mapper_->EnqueueKeyFrame(kf_);
+
   prev_frame_ = std::make_shared<Frame>(*curr_frame_);
   prev_kf_id_ = curr_frame_->curr_id;
   map_->origin = kf_;
@@ -117,18 +123,15 @@ void Tracker::initializePose()
 
 bool Tracker::trackUsingMotionModel()
 {
-  curr_frame_->SetPose(velocity_ * prev_frame_->camera_world_transform);
-  std::fill(curr_frame_->map_points.begin(), curr_frame_->map_points.end(), nullptr);
+  updatePrevFrame();
 
-  auto prev_kf_ref = prev_frame_->kf_ref;
-  cv::Mat prev_transform = pose_history.back();
-  prev_frame_->SetPose(prev_transform * prev_kf_ref->GetPose());
-  // TODO: Temporarily add additional close map points to previous frame for
-  // better feature matching and remove afterwards.
+  curr_frame_->SetPose(velocity_ * prev_frame_->pose.transform_cw);
+  std::fill(curr_frame_->map_points.begin(), curr_frame_->map_points.end(), nullptr);
 
   FeatureMatcher matcher(0.9);
   auto matches = matcher.ProjectionSearch(
     *curr_frame_, *prev_frame_, PROJECTION_SEARCH_RADIUS);
+  // If the previous search failed, rerun with a larger radius.
   if (matches < MIN_MATCHING_POINTS_PROJECTION) {
     std::fill(curr_frame_->map_points.begin(), curr_frame_->map_points.end(), nullptr);
     matches = matcher.ProjectionSearch(
@@ -138,7 +141,10 @@ bool Tracker::trackUsingMotionModel()
     return false;
   }
 
-  return true;
+  // TODO: Optimize pose
+
+  int inlier_matches = 0;
+  return inlier_matches >= MIN_TRACKING_INLIERS;
 }
 
 bool Tracker::trackUsingReferenceFrame()
@@ -154,9 +160,185 @@ bool Tracker::trackUsingReferenceFrame()
   }
 
   curr_frame_->map_points = std::move(matching_points);
-  curr_frame_->SetPose(prev_frame_->camera_world_transform);
+  curr_frame_->SetPose(prev_frame_->pose.transform_cw);
 
-  return true;
+  // TODO: Optimize pose
+
+  int inlier_matches = 0;
+  return inlier_matches >= MIN_TRACKING_INLIERS;
+}
+
+void Tracker::updatePrevFrame()
+{
+  auto prev_kf_ref = prev_frame_->kf_ref;
+  cv::Mat prev_transform = pose_history.back();
+  prev_frame_->SetPose(prev_transform * prev_kf_ref->GetPose());
+
+  if (prev_kf_id_ == prev_frame_->curr_id) {
+    return;
+  }
+
+  auto create_point = [this](int idx) -> void {
+      auto world_pos = prev_frame_->UnprojectToWorldFrame(idx);
+      auto new_map_point = std::make_shared<MapPoint>(
+        world_pos, kf_, map_);
+      prev_frame_->map_points[idx] = new_map_point;
+    };
+  createClosePoints(prev_frame_.get(), create_point);
+}
+
+bool Tracker::trackLocalMap()
+{
+  updateLocalMap();
+  findLocalMatches();
+
+  // TODO: Optimize pose
+
+  local_matching_inliers_ = 0;
+  for (auto mp:curr_frame_->map_points) {
+    if (mp == nullptr) {
+      continue;
+    }
+    if (mp->GetNumObservations() > 0) {
+      local_matching_inliers_++;
+    }
+    mp->IncreaseFound();
+  }
+  return local_matching_inliers_ >= MIN_LOCAL_MAP_INLIERS;
+}
+
+void Tracker::updateLocalMap()
+{
+  int max_matching_points = 0;
+  std::shared_ptr<KeyFrame> similar_kf;
+
+  // Find all key frames tracking similar points to the current frame.
+  std::map<std::shared_ptr<KeyFrame>, int> key_frame_obs;
+  for (auto mp:curr_frame_->map_points) {
+    if (mp == nullptr || mp->Culled()) {
+      mp = nullptr;
+      continue;
+    }
+    for (auto [kf, _]:mp->GetObservations()) {
+      key_frame_obs[kf]++;
+    }
+  }
+
+  if (key_frame_obs.empty()) {
+    return;
+  }
+  local_key_frames_.clear();
+
+  for (auto [kf, count]:key_frame_obs) {
+    if (kf->Culled()) {
+      continue;
+    }
+    // Track the maximum matching points across all key frames to set the
+    // reference frame for the current frame.
+    if (count > max_matching_points) {
+      max_matching_points = count;
+      similar_kf = kf;
+    }
+    local_key_frames_.push_back(kf);
+  }
+
+  // Include additional neighbouring key frames from the covisibility graph and
+  // spanning tree.
+  auto new_local_key_frames = local_key_frames_;
+  for (auto kf:local_key_frames_) {
+    if (new_local_key_frames.size() > MAX_LOCAL_KEY_FRAMES) {
+      break;
+    }
+
+    auto neighbours = kf->GetCovisibleKeyFrames(10);
+    for (auto neighbour:neighbours) {
+      if (!neighbour->Culled() &&
+        std::find(
+          new_local_key_frames.begin(),
+          new_local_key_frames.end(),
+          neighbour
+        ) == new_local_key_frames.end())
+      {
+        new_local_key_frames.push_back(neighbour);
+        break;
+      }
+    }
+
+    auto sp_childs = kf->GetChildren();
+    for (auto child:sp_childs) {
+      if (!child->Culled() &&
+        std::find(
+          new_local_key_frames.begin(), new_local_key_frames.end(), child
+        ) == new_local_key_frames.end())
+      {
+        new_local_key_frames.push_back(child);
+        break;
+      }
+    }
+
+    auto sp_parent = kf->GetParent();
+    if (!sp_parent->Culled() &&
+      std::find(
+        new_local_key_frames.begin(), new_local_key_frames.end(), sp_parent
+      ) == new_local_key_frames.end())
+    {
+      new_local_key_frames.push_back(sp_parent);
+    }
+  }
+
+  if (similar_kf != nullptr) {
+    curr_frame_->kf_ref = similar_kf;
+  }
+  local_key_frames_ = new_local_key_frames;
+
+  local_map_points_.clear();
+  // Track all points associated with local key frames.
+  for (auto kf:local_key_frames_) {
+    auto map_points = kf->GetMapPoints();
+    for (auto mp:map_points) {
+      if (mp == nullptr ||
+        std::find(
+          local_map_points_.begin(), local_map_points_.end(), mp
+        ) == local_map_points_.end())
+      {
+        continue;
+      }
+      local_map_points_.push_back(mp);
+    }
+  }
+}
+
+void Tracker::findLocalMatches()
+{
+  for (auto mp:curr_frame_->map_points) {
+    if (mp->Culled()) {
+      mp = nullptr;
+    } else {
+      mp->tracked = false;
+      mp->IncreaseVisible();
+    }
+  }
+
+  int matches = 0;
+  for (auto local_mp:local_map_points_) {
+    if (local_mp->Culled() ||
+      std::find(
+        curr_frame_->map_points.begin(), curr_frame_->map_points.end(), local_mp
+      ) != curr_frame_->map_points.end())
+    {
+      continue;
+    }
+
+    if (curr_frame_->ValidFrustumProjection(local_mp)) {
+      local_mp->IncreaseVisible();
+      matches++;
+    }
+  }
+
+  if (matches > 0) {
+    FeatureMatcher matcher(0.8);
+    matcher.ProjectionSearch(*curr_frame_, local_map_points_);
+  }
 }
 
 bool Tracker::keyFrameInclusionHeuristic()
@@ -166,57 +348,93 @@ bool Tracker::keyFrameInclusionHeuristic()
     return false;
   }
 
+  int num_tracked_points = kf_->GetNumTrackedPoints(3);
   int tracked_close_points = 0;
   int non_tracked_close_points = 0;
+  for (int i = 0; i < int(curr_frame_->map_points.size()); i++) {
+    if (curr_frame_->depth_points[i] > 0 &&
+      curr_frame_->depth_points[i] < camera_params_.depth_threshold)
+    {
+      if (curr_frame_->map_points[i] != nullptr) {
+        tracked_close_points++;
+      } else {
+        non_tracked_close_points++;
+      }
+    }
+  }
 
   /**
-   * Condition 1a: More than 20 frames have passed since the last global
-   * relocalization.
-   * Condition 1b: Local mapping is idle and more than 20 frames have passes
-   * since the last key frame insertion.
-   * Condition 1c: Too few close points are being tracked.
+   * Condition 1a: More than 20 frames have passed since the last key frame
+   * insertion.
+   * Condition 1b: Local mapping is idle.
+   * Condition 1c: Too few close points are being tracked or too few points in
+   * the local map are being observed.
+   * Condition 2: Mandatory condition with more liberal constraints than 1c.
    */
-  return false;
+  bool condition_1a = curr_frame_->curr_id >= prev_kf_id_ + camera_params_.fps;
+  bool condition_1b = local_mapper_->KeyFramesQueued() == 0;
+  bool close_point_deficient = tracked_close_points < 100 && non_tracked_close_points > 70;
+  bool condition_1c = (local_matching_inliers_ < 0.25 * num_tracked_points ||
+    close_point_deficient);
+  bool condition_2 = ((local_matching_inliers_ < 0.75 * num_tracked_points ||
+    close_point_deficient) && local_matching_inliers_ > 15);
+  if ((condition_1a || condition_1b || condition_1c) && condition_2) {
+    if (local_mapper_->KeyFramesQueued() < 3) {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
 }
 
 void Tracker::insertKeyFrame()
 {
   kf_ = std::make_shared<KeyFrame>(*curr_frame_, map_);
   curr_frame_->kf_ref = kf_;
+  createClosePoints(
+    curr_frame_.get(), std::bind(
+      &Tracker::createNewMapPoint, this, std::placeholders::_1));
 
-  std::vector<std::pair<int, int>> depths;
-  for (int i = 0; i < int(curr_frame_->depth_points.size()); i++) {
-    depths.push_back(std::pair(curr_frame_->depth_points[i], i));
-  }
-  std::ranges::sort(depths);
-
-  int close_points = 0;
-  for (auto [dist, idx]:depths) {
-    auto map_point = curr_frame_->map_points[idx];
-    if (map_point == nullptr) {
-      createNewMapPoint(idx);
-    }
-    close_points++;
-
-    if (close_points >= MIN_CLOSE_MAP_POINTS && \
-      dist > camera_params_.depth_threshold)
-    {
-      break;
-    }
-  }
-
+  local_mapper_->EnqueueKeyFrame(kf_);
   prev_kf_id_ = curr_frame_->curr_id;
 }
 
 void Tracker::createNewMapPoint(int point_idx)
 {
   auto world_pos = curr_frame_->UnprojectToWorldFrame(point_idx);
-  auto new_map_point = std::make_shared<MapPoint>(
-    world_pos, kf_, map_);
+  auto new_map_point = std::make_shared<MapPoint>(world_pos, kf_, map_);
   new_map_point->AddObservation(kf_, point_idx);
+  new_map_point->UpdateObservations();
   kf_->AddMapPoint(new_map_point, point_idx);
   map_->AddMapPoint(new_map_point);
   curr_frame_->map_points[point_idx] = new_map_point;
+}
+
+void Tracker::createClosePoints(
+  Frame * frame, std::function<void(int)> point_creation_func)
+{
+  std::vector<std::pair<int, int>> depths;
+  for (int i = 0; i < int(frame->depth_points.size()); i++) {
+    depths.push_back(std::make_pair(frame->depth_points[i], i));
+  }
+  std::ranges::sort(depths);
+
+  int close_points = 0;
+  for (auto [dist, idx]:depths) {
+    auto mp = frame->map_points[idx];
+    if (mp == nullptr || mp->GetNumObservations() < 1) {
+      point_creation_func(idx);
+    }
+
+    close_points++;
+    if (close_points >= MIN_CLOSE_MAP_POINTS &&
+      dist > camera_params_.depth_threshold)
+    {
+      break;
+    }
+  }
 }
 
 }  // vslam

@@ -9,6 +9,7 @@
 #include <sensor_msgs/msg/image.hpp>
 
 #include <memory>
+#include <thread>
 
 namespace vslam
 {
@@ -18,6 +19,7 @@ namespace sync_policies = message_filters::sync_policies;
 using ApproximateTimeSyncPolicy = message_filters::Synchronizer<sync_policies::ApproximateTime<sensor_msgs::msg::Image,
     sensor_msgs::msg::Image>>;
 
+class LocalMapper;
 class Tracker;
 
 class VSLAMNode : public rclcpp::Node
@@ -33,7 +35,10 @@ private:
     const sensor_msgs::msg::Image::ConstSharedPtr rgb_image,
     const sensor_msgs::msg::Image::ConstSharedPtr depth_image);
 
+  std::unique_ptr<LocalMapper> local_mapper_;
   std::unique_ptr<Tracker> tracker_;
+
+  std::jthread lm_thread_;
 
   message_filters::Subscriber<sensor_msgs::msg::Image> rgb_sub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> depth_sub_;

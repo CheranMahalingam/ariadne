@@ -33,6 +33,7 @@ public:
     cv::InputArray image_arr, std::vector<cv::KeyPoint> & key_points,
     cv::OutputArray descriptors);
 
+  float GetScaleFactor() const;
   const std::vector<float> & GetScaleFactors() const;
 
 private:

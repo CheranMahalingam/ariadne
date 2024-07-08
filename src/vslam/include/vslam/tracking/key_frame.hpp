@@ -2,6 +2,7 @@
 #define VSLAM__KEY_FRAME_HPP_
 
 #include "vslam/tracking/frame.hpp"
+#include "vslam/utils.hpp"
 
 #include "DBoW3/DBoW3.h"
 
@@ -15,7 +16,7 @@ namespace vslam
 class Map;
 class MapPoint;
 
-class KeyFrame : public std::enable_shared_from_this<KeyFrame>
+class KeyFrame : public FrameBase, std::enable_shared_from_this<KeyFrame>
 {
 public:
   static constexpr int MIN_KEY_FRAME_CONNECTION_WEIGHT = 15;
@@ -39,11 +40,15 @@ public:
   void Cull();
   bool Culled() const;
 
-  void SetPose(cv::Mat pose);
+  cv::Mat UnprojectToWorldFrame(int point_idx) const override;
+
+  void SetPose(cv::Mat pose_cw);
 
   cv::Mat GetPose() const;
   cv::Mat GetPoseInverse() const;
   cv::Mat GetCameraCenter() const;
+  cv::Mat GetRotation() const;
+  cv::Mat GetTranslation() const;
 
   int GetWeight(std::shared_ptr<KeyFrame> kf) const;
   std::vector<std::shared_ptr<KeyFrame>> GetCovisibleKeyFrames(
@@ -53,34 +58,20 @@ public:
   std::set<std::shared_ptr<KeyFrame>> GetChildren() const;
   std::set<std::shared_ptr<KeyFrame>> GetLoopEdges() const;
 
+  std::shared_ptr<MapPoint> GetMapPoint(int idx) const;
   const std::vector<std::shared_ptr<MapPoint>> & GetMapPoints() const;
+  int GetNumTrackedPoints(int min_observations) const;
 
   long int curr_id;
   long int frame_id;
 
-  CameraParams camera_params;
-
-  std::vector<cv::KeyPoint> key_points;
-  std::vector<float> stereo_key_points;
-  std::vector<float> depth_points;
-  std::vector<cv::Mat> descriptors;
-
-  cv::Mat camera_parent_transform;
-
-  DBoW3::BowVector bow_vector;
-  DBoW3::FeatureVector feat_vector;
-  DBoW3::Vocabulary vocabulary;
-
-  std::vector<float> image_scale_factors;
-
-  std::vector<std::vector<std::vector<int>>> frame_grid;
+  // Euclidean transform from parent key frame camera to current frame.
+  cv::Mat transform_cp;
 
 private:
   void updateCovisibilityGraph();
 
-  cv::Mat camera_world_transform_;
-  cv::Mat world_camera_transform_;
-  cv::Mat world_pos_;
+  Pose pose_;
 
   bool culled_;
 

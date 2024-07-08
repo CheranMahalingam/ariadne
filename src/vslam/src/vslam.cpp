@@ -1,7 +1,8 @@
-#include "vslam/camera_utils.hpp"
+#include "vslam/mapping/local_mapper.hpp"
 #include "vslam/mapping/map.hpp"
 #include "vslam/tracking/feature_extractor.hpp"
 #include "vslam/tracking/tracker.hpp"
+#include "vslam/utils.hpp"
 #include "vslam/vslam.hpp"
 
 #include "DBoW3/DBoW3.h"
@@ -24,7 +25,7 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->declare_parameter("camera_height", 1080);
   this->declare_parameter("camera_fps", 30);
   this->declare_parameter("camera_depth_threshold", 40.0);
-  this->declare_parameter("camera_depth_baseline_mm", 40.0);
+  this->declare_parameter("camera_depth_baseline_mm", 8.0);
   this->declare_parameter("camera_depth_map_factor", 5000.0);
 
   FeatureExtractor::ORBParams fp;
@@ -37,14 +38,15 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   CameraParams cp;
   this->get_parameter("camera_fx", cp.fx);
   this->get_parameter("camera_fy", cp.fy);
-  this->get_parameter("camera_cx", cp.fx);
-  this->get_parameter("camera_cy", cp.fy);
+  this->get_parameter("camera_cx", cp.cx);
+  this->get_parameter("camera_cy", cp.cy);
   this->get_parameter("camera_width", cp.width);
   this->get_parameter("camera_height", cp.height);
   this->get_parameter("camera_fps", cp.fps);
   this->get_parameter("camera_depth_threshold", cp.depth_threshold);
   this->get_parameter("camera_depth_baseline_mm", cp.depth_baseline);
   this->get_parameter("camera_depth_map_factor", cp.depth_map_factor);
+  cp.CreateIntrinsics();
 
   std::string vocabulary_path = "data/DBoW3/orbvoc.dbow3";
   DBoW3::Vocabulary v(vocabulary_path);
@@ -61,7 +63,10 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
 
   auto map = std::make_shared<Map>();
 
-  tracker_ = std::make_unique<Tracker>(map, v, fp, cp);
+  local_mapper_ = std::make_unique<LocalMapper>(map);
+  lm_thread_ = std::jthread(&LocalMapper::Run, local_mapper_.get());
+
+  tracker_ = std::make_unique<Tracker>(local_mapper_.get(), map, v, fp, cp);
 
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");
