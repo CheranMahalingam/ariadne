@@ -10,24 +10,15 @@ namespace vslam
 long int KeyFrame::key_frame_id = 0;
 
 KeyFrame::KeyFrame(const Frame & frame, std::shared_ptr<Map> map)
-: curr_id(key_frame_id),
+: FrameBase::FrameBase(frame),
+  curr_id(key_frame_id),
   frame_id(frame.curr_id),
-  camera_params(frame.camera_params),
-  key_points(frame.key_points),
-  stereo_key_points(frame.stereo_key_points),
-  depth_points(frame.depth_points),
-  descriptors(frame.descriptors),
-  bow_vector(frame.bow_vector),
-  feat_vector(frame.feat_vector),
-  vocabulary(frame.vocabulary),
-  image_scale_factors(frame.image_scale_factors),
-  frame_grid(frame.frame_grid),
+  pose_(frame.pose),
   culled_(false),
   map_points_(frame.map_points),
   map_(map)
 {
   key_frame_id++;
-  SetPose(frame.camera_world_transform);
 }
 
 void KeyFrame::AddMapPoint(std::shared_ptr<MapPoint> point, int idx)
@@ -142,6 +133,7 @@ void KeyFrame::Cull()
   for (auto & mp:map_points_) {
     if (mp != nullptr) {
       mp->EraseObservation(shared_from_this());
+      mp->UpdateObservations();
     }
   }
 
@@ -190,6 +182,7 @@ void KeyFrame::Cull()
     kf->ChangeParent(sp_tree_parent_);
   }
   sp_tree_parent_->EraseChild(shared_from_this());
+  transform_cp = pose_.transform_cw * sp_tree_parent_->GetPoseInverse();
   map_->EraseKeyFrame(shared_from_this());
 }
 
@@ -198,33 +191,39 @@ bool KeyFrame::Culled() const
   return culled_;
 }
 
-void KeyFrame::SetPose(cv::Mat pose)
+cv::Mat KeyFrame::UnprojectToWorldFrame(int point_idx) const
 {
-  camera_world_transform_ = pose;
+  return unprojectKeyPoint(point_idx, pose_);
+}
 
-  cv::Mat camera_world_rotation = camera_world_transform_.rowRange(0, 3).colRange(0, 3);
-  cv::Mat camera_world_translation = camera_world_transform_.rowRange(0, 3).col(3);
-  cv::Mat world_camera_rotation = camera_world_rotation.t();
-  world_pos_ = -camera_world_rotation.t() * camera_world_translation;
-
-  world_camera_transform_ = cv::Mat::eye(4, 4, camera_world_transform_.type());
-  world_camera_rotation.copyTo(world_camera_transform_.rowRange(0, 3).colRange(0, 3));
-  world_pos_.copyTo(world_camera_transform_.rowRange(0, 3).col(3));
+void KeyFrame::SetPose(cv::Mat pose_cw)
+{
+  pose_.SetPose(pose_cw);
 }
 
 cv::Mat KeyFrame::GetPose() const
 {
-  return camera_world_transform_.clone();
+  return pose_.transform_cw.clone();
 }
 
 cv::Mat KeyFrame::GetPoseInverse() const
 {
-  return world_camera_transform_.clone();
+  return pose_.transform_wc.clone();
 }
 
 cv::Mat KeyFrame::GetCameraCenter() const
 {
-  return world_pos_.clone();
+  return pose_.translation_wc.clone();
+}
+
+cv::Mat KeyFrame::GetRotation() const
+{
+  return pose_.rotation_cw.clone();
+}
+
+cv::Mat KeyFrame::GetTranslation() const
+{
+  return pose_.translation_cw.clone();
 }
 
 int KeyFrame::GetWeight(std::shared_ptr<KeyFrame> kf) const
@@ -260,9 +259,28 @@ std::set<std::shared_ptr<KeyFrame>> KeyFrame::GetLoopEdges() const
   return sp_tree_loop_edges_;
 }
 
+std::shared_ptr<MapPoint> KeyFrame::GetMapPoint(int idx) const
+{
+  return map_points_[idx];
+}
+
 const std::vector<std::shared_ptr<MapPoint>> & KeyFrame::GetMapPoints() const
 {
   return map_points_;
+}
+
+int KeyFrame::GetNumTrackedPoints(int min_observations) const
+{
+  int tracked_points = 0;
+  for (auto mp:map_points_) {
+    if (mp == nullptr || mp->Culled() ||
+      mp->GetNumObservations() < min_observations)
+    {
+      continue;
+    }
+    tracked_points++;
+  }
+  return tracked_points;
 }
 
 void KeyFrame::updateCovisibilityGraph()

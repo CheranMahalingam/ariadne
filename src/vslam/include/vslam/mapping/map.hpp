@@ -21,8 +21,6 @@ public:
   void EraseKeyFrame(std::shared_ptr<KeyFrame> kf);
   void EraseMapPoint(std::shared_ptr<MapPoint> mp);
 
-  void SetReferenceMapPoints(const std::vector<std::shared_ptr<MapPoint>> & map_points);
-
   int GetKeyFrameCount() const;
   int GetMapPointCount() const;
   std::vector<std::shared_ptr<KeyFrame>> GetKeyFrames() const;

@@ -35,14 +35,16 @@ set_target_properties(DBoW3 PROPERTIES
   IMPORTED_LOCATION ${DBoW3_LIB})
 
 add_library(vslam_lib
-  src/vslam.cpp
+  src/mapping/local_mapper.cpp
   src/mapping/map.cpp
   src/mapping/map_point.cpp
   src/tracking/feature_extractor.cpp
   src/tracking/feature_matcher.cpp
   src/tracking/frame.cpp
   src/tracking/key_frame.cpp
-  src/tracking/tracker.cpp)
+  src/tracking/tracker.cpp
+  src/utils.cpp
+  src/vslam.cpp)
 target_include_directories(vslam_lib
   PUBLIC
   include

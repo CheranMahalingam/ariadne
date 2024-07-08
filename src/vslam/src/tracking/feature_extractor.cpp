@@ -132,6 +132,11 @@ void FeatureExtractor::ComputeFeatures(
   }
 }
 
+float FeatureExtractor::GetScaleFactor() const
+{
+  return params_.orb_scale_factor;
+}
+
 const std::vector<float> & FeatureExtractor::GetScaleFactors() const
 {
   return image_pyramid_scale_;
