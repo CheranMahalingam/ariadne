@@ -1,6 +1,7 @@
 #include "vslam/mapping/local_mapper.hpp"
 #include "vslam/mapping/map.hpp"
 #include "vslam/mapping/map_point.hpp"
+#include "vslam/optimization/optimizer.hpp"
 #include "vslam/tracking/frame.hpp"
 #include "vslam/tracking/feature_matcher.hpp"
 #include "vslam/tracking/key_frame.hpp"
@@ -141,9 +142,23 @@ bool Tracker::trackUsingMotionModel()
     return false;
   }
 
-  // TODO: Optimize pose
+  Optimizer optimizer;
+  optimizer.PoseOptimization(curr_frame_);
 
   int inlier_matches = 0;
+  for (int i = 0; i < int(curr_frame_->map_points.size()); i++) {
+    if (curr_frame_->map_points[i] == nullptr) {
+      continue;
+    }
+
+    if (curr_frame_->outliers[i]) {
+      curr_frame_->map_points[i] = nullptr;
+      curr_frame_->outliers[i] = false;
+    } else if (curr_frame_->map_points[i]->GetNumObservations() > 0) {
+      inlier_matches++;
+    }
+  }
+
   return inlier_matches >= MIN_TRACKING_INLIERS;
 }
 
@@ -162,9 +177,22 @@ bool Tracker::trackUsingReferenceFrame()
   curr_frame_->map_points = std::move(matching_points);
   curr_frame_->SetPose(prev_frame_->pose.transform_cw);
 
-  // TODO: Optimize pose
+  Optimizer optimizer;
+  optimizer.PoseOptimization(curr_frame_);
 
   int inlier_matches = 0;
+  for (int i = 0; i < int(curr_frame_->map_points.size()); i++) {
+    if (curr_frame_->map_points[i] == nullptr) {
+      continue;
+    }
+
+    if (curr_frame_->outliers[i]) {
+      curr_frame_->map_points[i] = nullptr;
+      curr_frame_->outliers[i] = false;
+    } else {
+      inlier_matches++;
+    }
+  }
   return inlier_matches >= MIN_TRACKING_INLIERS;
 }
 
@@ -192,18 +220,26 @@ bool Tracker::trackLocalMap()
   updateLocalMap();
   findLocalMatches();
 
-  // TODO: Optimize pose
+  Optimizer optimizer;
+  optimizer.PoseOptimization(curr_frame_);
 
   local_matching_inliers_ = 0;
-  for (auto mp:curr_frame_->map_points) {
+  for (int i = 0; i < int(curr_frame_->map_points.size()); i++) {
+    auto mp = curr_frame_->map_points[i];
     if (mp == nullptr) {
       continue;
     }
-    if (mp->GetNumObservations() > 0) {
-      local_matching_inliers_++;
+
+    if (!curr_frame_->outliers[i]) {
+      if (mp->GetNumObservations() > 0) {
+        local_matching_inliers_++;
+      }
+      mp->IncreaseFound();
+    } else {
+      mp = nullptr;
     }
-    mp->IncreaseFound();
   }
+
   return local_matching_inliers_ >= MIN_LOCAL_MAP_INLIERS;
 }
 

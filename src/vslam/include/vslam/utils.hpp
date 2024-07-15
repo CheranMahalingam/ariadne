@@ -1,6 +1,8 @@
 #ifndef VSLAM__UTILS_HPP_
 #define VSLAM__UTILS_HPP_
 
+#include <eigen3/Eigen/Dense>
+#include "g2o/types/sba/types_six_dof_expmap.h"
 #include <opencv2/core.hpp>
 
 namespace vslam
@@ -49,6 +51,11 @@ struct Pose
 };
 
 int hamming_distance(const cv::Mat & a, const cv::Mat & b);
+
+g2o::SE3Quat convertToSE3Quat(const cv::Mat & transform);
+cv::Mat convertToMat(const g2o::SE3Quat & quat);
+cv::Mat convertToMat(const Eigen::Matrix<double, 3, 1> & matrix);
+Eigen::Matrix<double, 3, 1> convertToVector(const cv::Mat & translation);
 
 }  // vslam
 

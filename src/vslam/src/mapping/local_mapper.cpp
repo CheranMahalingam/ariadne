@@ -1,6 +1,7 @@
 #include "vslam/mapping/local_mapper.hpp"
 #include "vslam/mapping/map.hpp"
 #include "vslam/mapping/map_point.hpp"
+#include "vslam/optimization/optimizer.hpp"
 #include "vslam/tracking/feature_matcher.hpp"
 #include "vslam/tracking/key_frame.hpp"
 
@@ -23,11 +24,15 @@ void LocalMapper::Run()
 
     processCurrKeyFrame();
     cullMapPoints();
-    createNewMapPoints();
+    triangulateNewMapPoints();
     if (KeyFramesQueued() == 0) {
       fuseDuplicateMapPoints();
     }
     if (KeyFramesQueued() == 0) {
+      if (map_->GetKeyFrameCount() > 2) {
+        Optimizer optimizer;
+        optimizer.LocalBundleAdjustment(curr_kf_);
+      }
       cullKeyFrames();
     }
 
@@ -71,7 +76,7 @@ void LocalMapper::processCurrKeyFrame()
   map_->AddKeyFrame(curr_kf_);
 }
 
-void LocalMapper::createNewMapPoints()
+void LocalMapper::triangulateNewMapPoints()
 {
   FeatureMatcher matcher(0.6);
   auto local_key_frames = curr_kf_->GetCovisibleKeyFrames(10);

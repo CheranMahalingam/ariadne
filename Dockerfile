@@ -37,7 +37,8 @@ RUN apt-get update && \
     apt-get install -y \
       ros-${ROS_DISTRO}-ros-base \
       ros-dev-tools \
-      libopencv-dev && \
+      libopencv-dev \
+      libceres-dev && \
     rm -rf /var/lib/apt/lists/*
 
 RUN git clone https://github.com/CheranMahalingam/DBow3.git && \

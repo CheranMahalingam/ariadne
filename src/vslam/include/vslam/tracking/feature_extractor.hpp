@@ -89,7 +89,7 @@ private:
   std::vector<cv::Mat> buildImagePyramid(const cv::Mat & image);
 
   std::vector<cv::KeyPoint> buildQuadTree(
-    const cv::Mat & image, int num_features, const RectBounds & bounds,
+    int num_features, const RectBounds & bounds,
     const std::vector<cv::KeyPoint> & key_points);
 
   std::vector<cv::KeyPoint> computeFASTFeatures(

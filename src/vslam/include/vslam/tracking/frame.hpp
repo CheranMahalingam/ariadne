@@ -109,6 +109,7 @@ public:
   std::shared_ptr<KeyFrame> kf_ref;
 
   std::vector<std::shared_ptr<MapPoint>> map_points;
+  std::vector<bool> outliers;
 };
 
 }  // vslam

@@ -165,8 +165,7 @@ std::vector<std::vector<cv::KeyPoint>> FeatureExtractor::computeKeyPoints(
 
     std::vector<cv::KeyPoint> & level_key_points = key_points[level];
     level_key_points = buildQuadTree(
-      pyramid[level], features_per_level_[level], bounds,
-      pre_distributed_points);
+      features_per_level_[level], bounds, pre_distributed_points);
 
     for (auto & kp:level_key_points) {
       kp.pt.x += bounds.x_min;
@@ -243,7 +242,7 @@ std::vector<cv::Mat> FeatureExtractor::buildImagePyramid(const cv::Mat & image)
 }
 
 std::vector<cv::KeyPoint> FeatureExtractor::buildQuadTree(
-  const cv::Mat & image, int num_features, const RectBounds & bounds,
+  int num_features, const RectBounds & bounds,
   const std::vector<cv::KeyPoint> & key_points)
 {
   RectBounds feature_bounds(

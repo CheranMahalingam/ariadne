@@ -15,6 +15,8 @@ class Map;
 class MapPoint : public std::enable_shared_from_this<MapPoint>
 {
 public:
+  static long int point_id;
+
   MapPoint(
     cv::Mat pos, std::shared_ptr<KeyFrame> key_frame, std::shared_ptr<Map> map);
 
@@ -48,6 +50,7 @@ public:
     float dist, float max_dist, float scale_factor, int num_scales);
 
   long int initial_kf_id;
+  long int curr_id;
 
   bool tracked;
   float projected_x;

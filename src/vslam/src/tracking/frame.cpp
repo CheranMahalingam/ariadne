@@ -149,7 +149,8 @@ Frame::Frame(const Frame & frame)
   curr_id(frame_id),
   pose(frame.pose),
   kf_ref(frame.kf_ref),
-  map_points(frame.map_points)
+  map_points(frame.map_points),
+  outliers(frame.outliers)
 {
   frame_id++;
 }
@@ -165,7 +166,8 @@ Frame::Frame(
 : FrameBase(
     depth, key_points, descriptors, extractor, vocabulary, camera_params),
   curr_id(frame_id),
-  map_points(std::vector<std::shared_ptr<MapPoint>>(key_points.size()))
+  map_points(std::vector<std::shared_ptr<MapPoint>>(key_points.size())),
+  outliers(std::vector<bool>(key_points.size(), false))
 {
   frame_id++;
 }

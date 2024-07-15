@@ -37,7 +37,7 @@ public:
 private:
   void processCurrKeyFrame();
 
-  void createNewMapPoints();
+  void triangulateNewMapPoints();
 
   void fuseDuplicateMapPoints();
 

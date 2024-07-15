@@ -8,15 +8,19 @@
 namespace vslam
 {
 
+long int MapPoint::point_id = 0;
+
 MapPoint::MapPoint(
   cv::Mat pos, std::shared_ptr<KeyFrame> key_frame, std::shared_ptr<Map> map)
 : initial_kf_id(key_frame->curr_id),
+  curr_id(point_id),
   world_pos_(pos),
   culled_(false),
   num_observations_(0),
   kf_ref_(key_frame),
   map_(map)
 {
+  point_id++;
 }
 
 void MapPoint::AddObservation(std::shared_ptr<KeyFrame> kf, int idx)

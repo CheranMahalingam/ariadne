@@ -20,13 +20,17 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
+
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
+find_package(Eigen3 REQUIRED)
+find_package(G2O REQUIRED)
 find_package(OpenCV REQUIRED)
 
 find_library(DBoW3_LIB libDBoW3.so)
@@ -38,6 +42,7 @@ add_library(vslam_lib
   src/mapping/local_mapper.cpp
   src/mapping/map.cpp
   src/mapping/map_point.cpp
+  src/optimization/optimizer.cpp
   src/tracking/feature_extractor.cpp
   src/tracking/feature_matcher.cpp
   src/tracking/frame.cpp
@@ -48,6 +53,8 @@ add_library(vslam_lib
 target_include_directories(vslam_lib
   PUBLIC
   include
+  ${EIGEN3_INCLUDE_DIR}
+  ${G2O_INCLUDE_DIR}
   ${OpenCV_INCLUDE_DIRS})
 ament_target_dependencies(vslam_lib
   rclcpp
@@ -67,6 +74,8 @@ add_executable(vslam_node src/vslam_node.cpp)
 target_link_libraries(vslam_node
   vslam_lib
   DBoW3
+  ${EIGEN3_LIBS}
+  ${G2O_LIBS}
   ${OpenCV_LIBS})
 
 add_executable(tum_rosbag src/tools/tum_rosbag.cpp)

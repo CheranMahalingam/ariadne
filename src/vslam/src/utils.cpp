@@ -45,4 +45,46 @@ int hamming_distance(const cv::Mat & a, const cv::Mat & b)
   return dist;
 }
 
+g2o::SE3Quat convertToSE3Quat(const cv::Mat & transform)
+{
+  Eigen::Matrix<double, 3, 3> rotation;
+  rotation << (
+    transform.at<float>(0, 0), transform.at<float>(0, 1), transform.at<float>(0, 2),
+    transform.at<float>(1, 0), transform.at<float>(1, 1), transform.at<float>(1, 2),
+    transform.at<float>(2, 0), transform.at<float>(2, 1), transform.at<float>(2, 2));
+  Eigen::Matrix<double, 3, 1> translation(
+    transform.at<float>(0, 3), transform.at<float>(1, 3), transform.at<float>(2, 3));
+  return g2o::SE3Quat(rotation, translation);
+}
+
+cv::Mat convertToMat(const g2o::SE3Quat & quat)
+{
+  auto homogeneous_matrix = quat.to_homogeneous_matrix();
+  cv::Mat transform(4, 4, CV_32F);
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      transform.at<float>(i, j) = homogeneous_matrix(i, j);
+    }
+  }
+  return transform;
+}
+
+cv::Mat convertToMat(const Eigen::Matrix<double, 3, 1> & matrix)
+{
+  cv::Mat translation(3, 1, CV_32F);
+  for (int i = 0; i < 3; i++) {
+    translation.at<float>(i) = matrix(i);
+  }
+  return translation;
+}
+
+Eigen::Matrix<double, 3, 1> convertToVector(const cv::Mat & translation)
+{
+  auto vec = Eigen::Matrix<double, 3, 1>(
+    translation.at<float>(0),
+    translation.at<float>(1),
+    translation.at<float>(2));
+  return vec;
+}
+
 }  // vslam
