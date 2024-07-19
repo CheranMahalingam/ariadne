@@ -13,6 +13,7 @@
 namespace vslam
 {
 
+class Canvas;
 class Frame;
 class KeyFrame;
 class LocalMapper;
@@ -38,6 +39,7 @@ public:
   static constexpr int MAX_LOCAL_KEY_FRAMES = 80;
 
   Tracker(
+    Canvas * canvas,
     LocalMapper * local_mapper,
     std::shared_ptr<Map> map,
     const DBoW3::Vocabulary & vocabulary,
@@ -92,6 +94,7 @@ private:
 
   std::unique_ptr<FeatureExtractor> extractor_;
 
+  Canvas * canvas_;
   LocalMapper * local_mapper_;
 };
 

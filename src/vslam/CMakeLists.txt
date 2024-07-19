@@ -24,6 +24,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake_mo
 
 find_package(ament_cmake REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(foxglove_msgs REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
@@ -49,6 +50,7 @@ add_library(vslam_lib
   src/tracking/key_frame.cpp
   src/tracking/tracker.cpp
   src/utils.cpp
+  src/visualization/canvas.cpp
   src/vslam.cpp)
 target_include_directories(vslam_lib
   PUBLIC
@@ -57,10 +59,11 @@ target_include_directories(vslam_lib
   ${G2O_INCLUDE_DIR}
   ${OpenCV_INCLUDE_DIRS})
 ament_target_dependencies(vslam_lib
-  rclcpp
-  sensor_msgs
   cv_bridge
-  message_filters)
+  foxglove_msgs
+  message_filters
+  rclcpp
+  sensor_msgs)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

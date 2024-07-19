@@ -13,6 +13,7 @@
 
   <depend>cv_bridge</depend>
   <depend>eigen</depend>
+  <depend>foxglove_msgs</depend>
   <depend>libg2o</depend>
   <depend>message_filters</depend>
   <depend>rclcpp</depend>

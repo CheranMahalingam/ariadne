@@ -3,6 +3,7 @@
 #include "vslam/tracking/feature_extractor.hpp"
 #include "vslam/tracking/tracker.hpp"
 #include "vslam/utils.hpp"
+#include "vslam/visualization/canvas.hpp"
 #include "vslam/vslam.hpp"
 
 #include "DBoW3/DBoW3.h"
@@ -61,13 +62,6 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
       "Successfully loaded BoW vocabulary from %s", vocabulary_path.c_str());
   }
 
-  auto map = std::make_shared<Map>();
-
-  local_mapper_ = std::make_unique<LocalMapper>(map);
-  lm_thread_ = std::jthread(&LocalMapper::Run, local_mapper_.get());
-
-  tracker_ = std::make_unique<Tracker>(local_mapper_.get(), map, v, fp, cp);
-
   rgb_sub_.subscribe(this, "/sensing/camera/rgb");
   depth_sub_.subscribe(this, "/sensing/camera/depth");
   camera_syncer_ = std::make_unique<ApproximateTimeSyncPolicy>(MAX_QUEUE_SIZE);
@@ -76,6 +70,20 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
     std::bind(
       &VSLAMNode::rgbdImageCallback, this,
       std::placeholders::_1, std::placeholders::_2));
+
+  debug_pose_pub_ = this->create_publisher<foxglove_msgs::msg::PoseInFrame>(
+    "debug/pose", 10);
+
+  auto map = std::make_shared<Map>();
+
+  local_mapper_ = std::make_unique<LocalMapper>(map);
+  lm_thread_ = std::jthread(&LocalMapper::Run, local_mapper_.get());
+
+  canvas_ = std::make_unique<Canvas>(debug_pose_pub_);
+  canvas_thread_ = std::jthread(&Canvas::Run, canvas_.get());
+
+  tracker_ = std::make_unique<Tracker>(
+    canvas_.get(), local_mapper_.get(), map, v, fp, cp);
 }
 
 VSLAMNode::~VSLAMNode() = default;

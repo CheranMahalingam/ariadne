@@ -6,6 +6,7 @@
 #include "vslam/tracking/feature_matcher.hpp"
 #include "vslam/tracking/key_frame.hpp"
 #include "vslam/tracking/tracker.hpp"
+#include "vslam/visualization/canvas.hpp"
 
 #include <opencv2/imgproc.hpp>
 
@@ -16,6 +17,7 @@ namespace vslam
 {
 
 Tracker::Tracker(
+  Canvas * canvas,
   LocalMapper * local_mapper,
   std::shared_ptr<Map> map,
   const DBoW3::Vocabulary & vocabulary,
@@ -26,6 +28,7 @@ Tracker::Tracker(
   local_matching_inliers_(0),
   map_(map),
   state_(SLAMState::INITIALIZING),
+  canvas_(canvas),
   local_mapper_(local_mapper)
 {
   extractor_ = std::make_unique<FeatureExtractor>(orb_params);
@@ -67,6 +70,8 @@ void Tracker::Track(
     ok = trackLocalMap();
 
     if (ok) {
+      canvas_->SetCameraPose(curr_frame_->pose.transform_cw);
+
       if (prev_frame_->pose.initialized) {
         velocity_ = curr_frame_->pose.transform_cw * prev_frame_->pose.transform_wc;
       } else {
