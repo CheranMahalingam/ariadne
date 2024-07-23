@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 
 namespace vslam
@@ -16,7 +17,7 @@ namespace vslam
 class Map;
 class MapPoint;
 
-class KeyFrame : public FrameBase, std::enable_shared_from_this<KeyFrame>
+class KeyFrame : public FrameBase, public std::enable_shared_from_this<KeyFrame>
 {
 public:
   static constexpr int MIN_KEY_FRAME_CONNECTION_WEIGHT = 15;
@@ -38,29 +39,29 @@ public:
   void AddLoopEdge(std::shared_ptr<KeyFrame> kf);
 
   void Cull();
-  bool Culled() const;
+  bool Culled();
 
-  cv::Mat UnprojectToWorldFrame(int point_idx) const override;
+  cv::Mat UnprojectToWorldFrame(int point_idx) override;
 
   void SetPose(cv::Mat pose_cw);
 
-  cv::Mat GetPose() const;
-  cv::Mat GetPoseInverse() const;
-  cv::Mat GetCameraCenter() const;
-  cv::Mat GetRotation() const;
-  cv::Mat GetTranslation() const;
+  cv::Mat GetPose();
+  cv::Mat GetPoseInverse();
+  cv::Mat GetCameraCenter();
+  cv::Mat GetRotation();
+  cv::Mat GetTranslation();
 
-  int GetWeight(std::shared_ptr<KeyFrame> kf) const;
+  int GetWeight(std::shared_ptr<KeyFrame> kf);
   std::vector<std::shared_ptr<KeyFrame>> GetCovisibleKeyFrames(
-    int num_frames = 0) const;
+    int num_frames = 0);
 
-  std::shared_ptr<KeyFrame> GetParent() const;
-  std::set<std::shared_ptr<KeyFrame>> GetChildren() const;
-  std::set<std::shared_ptr<KeyFrame>> GetLoopEdges() const;
+  std::shared_ptr<KeyFrame> GetParent();
+  std::set<std::shared_ptr<KeyFrame>> GetChildren();
+  std::set<std::shared_ptr<KeyFrame>> GetLoopEdges();
 
-  std::shared_ptr<MapPoint> GetMapPoint(int idx) const;
-  const std::vector<std::shared_ptr<MapPoint>> & GetMapPoints() const;
-  int GetNumTrackedPoints(int min_observations) const;
+  std::shared_ptr<MapPoint> GetMapPoint(int idx);
+  const std::vector<std::shared_ptr<MapPoint>> & GetMapPoints();
+  int GetNumTrackedPoints(int min_observations);
 
   long int curr_id;
   long int frame_id;
@@ -70,6 +71,8 @@ public:
 
 private:
   void updateCovisibilityGraph();
+
+  std::mutex kf_mutex_;
 
   Pose pose_;
 
@@ -85,6 +88,7 @@ private:
   std::set<std::shared_ptr<KeyFrame>> sp_tree_children_;
   std::set<std::shared_ptr<KeyFrame>> sp_tree_loop_edges_;
 
+  std::mutex obs_mutex_;
   std::vector<std::shared_ptr<MapPoint>> map_points_;
   std::shared_ptr<Map> map_;
 };

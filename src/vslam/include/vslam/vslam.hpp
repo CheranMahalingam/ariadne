@@ -37,12 +37,14 @@ private:
     const sensor_msgs::msg::Image::ConstSharedPtr rgb_image,
     const sensor_msgs::msg::Image::ConstSharedPtr depth_image);
 
+  void drawLoop();
+
   std::unique_ptr<LocalMapper> local_mapper_;
   std::unique_ptr<Canvas> canvas_;
   std::unique_ptr<Tracker> tracker_;
 
   std::jthread lm_thread_;
-  std::jthread canvas_thread_;
+  std::jthread draw_thread_;
 
   message_filters::Subscriber<sensor_msgs::msg::Image> rgb_sub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> depth_sub_;

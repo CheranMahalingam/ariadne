@@ -22,6 +22,7 @@ def generate_launch_description():
         executable='vslam_node',
         parameters=[LaunchConfiguration('vslam_param_file')],
         output='screen',
+        # prefix=['gdbserver localhost:3000'],
     )
 
     return LaunchDescription([

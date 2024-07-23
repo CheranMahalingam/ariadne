@@ -23,22 +23,26 @@ KeyFrame::KeyFrame(const Frame & frame, std::shared_ptr<Map> map)
 
 void KeyFrame::AddMapPoint(std::shared_ptr<MapPoint> point, int idx)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   map_points_[idx] = point;
 }
 
 void KeyFrame::EraseMapPoint(int idx)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   map_points_[idx] = nullptr;
 }
 
 void KeyFrame::AddConnection(std::shared_ptr<KeyFrame> kf, int weight)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   connection_weights_[kf] = weight;
   updateCovisibilityGraph();
 }
 
 void KeyFrame::EraseConnection(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   if (connection_weights_.find(kf) == connection_weights_.end()) {
     return;
   }
@@ -49,8 +53,13 @@ void KeyFrame::EraseConnection(std::shared_ptr<KeyFrame> kf)
 
 void KeyFrame::UpdateConnections()
 {
+  std::vector<std::shared_ptr<MapPoint>> curr_map_points;
+  {
+    std::lock_guard<std::mutex> lock(kf_mutex_);
+    curr_map_points = map_points_;
+  }
+
   std::map<std::shared_ptr<KeyFrame>, int> new_connection_weights;
-  auto curr_map_points = map_points_;
   for (auto map_point:curr_map_points) {
     if (map_point == nullptr || map_point->Culled()) {
       continue;
@@ -64,7 +73,9 @@ void KeyFrame::UpdateConnections()
       new_connection_weights[kf]++;
     }
   }
-  assert(!new_connection_weights.empty());
+  if (new_connection_weights.empty()) {
+    return;
+  }
 
   int max_weight = 0;
   std::shared_ptr<KeyFrame> max_weight_kf = nullptr;
@@ -92,142 +103,169 @@ void KeyFrame::UpdateConnections()
     temp_ordered_connections.push_back(kf);
   }
 
-  ordered_weights_ = temp_ordered_weights;
-  ordered_connections_ = temp_ordered_connections;
-  connection_weights_ = new_connection_weights;
-  if (sp_tree_parent_ == nullptr && curr_id != 0) {
-    sp_tree_parent_ = ordered_connections_.front();
-    sp_tree_parent_->AddChild(shared_from_this());
+  {
+    std::lock_guard<std::mutex> lock(kf_mutex_);
+    ordered_weights_ = temp_ordered_weights;
+    ordered_connections_ = temp_ordered_connections;
+    connection_weights_ = new_connection_weights;
+    if (sp_tree_parent_ == nullptr && curr_id != 0) {
+      sp_tree_parent_ = ordered_connections_.front();
+      sp_tree_parent_->AddChild(shared_from_this());
+    }
   }
 }
 
 void KeyFrame::AddChild(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   sp_tree_children_.insert(kf);
 }
 
 void KeyFrame::EraseChild(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   sp_tree_children_.erase(kf);
 }
 
 void KeyFrame::ChangeParent(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   sp_tree_parent_ = kf;
   kf->AddChild(shared_from_this());
 }
 
 void KeyFrame::AddLoopEdge(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   sp_tree_loop_edges_.insert(kf);
 }
 
 void KeyFrame::Cull()
 {
-  culled_ = true;
+  {
+    std::lock_guard<std::mutex> lock(kf_mutex_);
+    culled_ = true;
+  }
 
   for (auto & [kf, weight]:connection_weights_) {
     kf->EraseConnection(shared_from_this());
   }
 
-  for (auto & mp:map_points_) {
-    if (mp != nullptr) {
-      mp->EraseObservation(shared_from_this());
-      mp->UpdateObservations();
+  {
+    std::lock_guard<std::mutex> lock(kf_mutex_);
+    for (auto & mp:map_points_) {
+      if (mp != nullptr) {
+        mp->EraseObservation(shared_from_this());
+        mp->UpdateObservations();
+      }
     }
   }
 
-  ordered_weights_.clear();
-  ordered_connections_.clear();
-  connection_weights_.clear();
+  {
+    std::lock_guard<std::mutex> lock(kf_mutex_);
 
-  std::vector<std::shared_ptr<KeyFrame>> candidates;
-  candidates.push_back(sp_tree_parent_);
-  while (!sp_tree_children_.empty()) {
-    bool end_search = true;
-    int max_weight = -1;
-    std::shared_ptr<KeyFrame> new_child = nullptr;
-    std::shared_ptr<KeyFrame> new_parent = nullptr;
+    ordered_weights_.clear();
+    ordered_connections_.clear();
+    connection_weights_.clear();
 
-    for (auto & child:sp_tree_children_) {
-      if (child->Culled()) {
-        continue;
-      }
+    std::vector<std::shared_ptr<KeyFrame>> candidates;
+    candidates.push_back(sp_tree_parent_);
+    while (!sp_tree_children_.empty()) {
+      bool end_search = true;
+      int max_weight = -1;
+      std::shared_ptr<KeyFrame> new_child = nullptr;
+      std::shared_ptr<KeyFrame> new_parent = nullptr;
 
-      auto child_connections = child->GetCovisibleKeyFrames();
-      for (auto & connection:child_connections) {
-        for (auto & candidate:candidates) {
-          if (candidate->curr_id == connection->curr_id) {
-            int weight = child->GetWeight(connection);
-            if (weight > max_weight) {
-              max_weight = weight;
-              new_child = child;
-              new_parent = connection;
-              end_search = false;
+      for (auto & child:sp_tree_children_) {
+        if (child->Culled()) {
+          continue;
+        }
+
+        auto child_connections = child->GetCovisibleKeyFrames();
+        for (auto & connection:child_connections) {
+          for (auto & candidate:candidates) {
+            if (candidate->curr_id == connection->curr_id) {
+              int weight = child->GetWeight(connection);
+              if (weight > max_weight) {
+                max_weight = weight;
+                new_child = child;
+                new_parent = connection;
+                end_search = false;
+              }
             }
           }
         }
       }
+
+      if (end_search) {
+        break;
+      }
+      new_child->ChangeParent(new_parent);
+      candidates.push_back(new_child);
+      sp_tree_children_.erase(new_child);
     }
 
-    if (end_search) {
-      break;
+    for (auto & kf:sp_tree_children_) {
+      kf->ChangeParent(sp_tree_parent_);
     }
-    new_child->ChangeParent(new_parent);
-    candidates.push_back(new_child);
-    sp_tree_children_.erase(new_child);
+    sp_tree_parent_->EraseChild(shared_from_this());
+    transform_cp = pose_.transform_cw * sp_tree_parent_->GetPoseInverse();
   }
 
-  for (auto & kf:sp_tree_children_) {
-    kf->ChangeParent(sp_tree_parent_);
-  }
-  sp_tree_parent_->EraseChild(shared_from_this());
-  transform_cp = pose_.transform_cw * sp_tree_parent_->GetPoseInverse();
   map_->EraseKeyFrame(shared_from_this());
 }
 
-bool KeyFrame::Culled() const
+bool KeyFrame::Culled()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return culled_;
 }
 
-cv::Mat KeyFrame::UnprojectToWorldFrame(int point_idx) const
+cv::Mat KeyFrame::UnprojectToWorldFrame(int point_idx)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return unprojectKeyPoint(point_idx, pose_);
 }
 
 void KeyFrame::SetPose(cv::Mat pose_cw)
 {
-  pose_.SetPose(pose_cw);
+  std::lock_guard<std::mutex> lock(kf_mutex_);
+  pose_.SetPose(pose_cw.clone());
 }
 
-cv::Mat KeyFrame::GetPose() const
+cv::Mat KeyFrame::GetPose()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return pose_.transform_cw.clone();
 }
 
-cv::Mat KeyFrame::GetPoseInverse() const
+cv::Mat KeyFrame::GetPoseInverse()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return pose_.transform_wc.clone();
 }
 
-cv::Mat KeyFrame::GetCameraCenter() const
+cv::Mat KeyFrame::GetCameraCenter()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return pose_.translation_wc.clone();
 }
 
-cv::Mat KeyFrame::GetRotation() const
+cv::Mat KeyFrame::GetRotation()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return pose_.rotation_cw.clone();
 }
 
-cv::Mat KeyFrame::GetTranslation() const
+cv::Mat KeyFrame::GetTranslation()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return pose_.translation_cw.clone();
 }
 
-int KeyFrame::GetWeight(std::shared_ptr<KeyFrame> kf) const
+int KeyFrame::GetWeight(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   if (connection_weights_.find(kf) == connection_weights_.end()) {
     return 0;
   }
@@ -235,8 +273,9 @@ int KeyFrame::GetWeight(std::shared_ptr<KeyFrame> kf) const
 }
 
 std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetCovisibleKeyFrames(
-  int num_frames) const
+  int num_frames)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   if (num_frames == 0 || num_frames >= int(ordered_connections_.size())) {
     return ordered_connections_;
   }
@@ -244,33 +283,39 @@ std::vector<std::shared_ptr<KeyFrame>> KeyFrame::GetCovisibleKeyFrames(
     ordered_connections_.begin(), ordered_connections_.begin() + num_frames);
 }
 
-std::shared_ptr<KeyFrame> KeyFrame::GetParent() const
+std::shared_ptr<KeyFrame> KeyFrame::GetParent()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return sp_tree_parent_;
 }
 
-std::set<std::shared_ptr<KeyFrame>> KeyFrame::GetChildren() const
+std::set<std::shared_ptr<KeyFrame>> KeyFrame::GetChildren()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return sp_tree_children_;
 }
 
-std::set<std::shared_ptr<KeyFrame>> KeyFrame::GetLoopEdges() const
+std::set<std::shared_ptr<KeyFrame>> KeyFrame::GetLoopEdges()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return sp_tree_loop_edges_;
 }
 
-std::shared_ptr<MapPoint> KeyFrame::GetMapPoint(int idx) const
+std::shared_ptr<MapPoint> KeyFrame::GetMapPoint(int idx)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return map_points_[idx];
 }
 
-const std::vector<std::shared_ptr<MapPoint>> & KeyFrame::GetMapPoints() const
+const std::vector<std::shared_ptr<MapPoint>> & KeyFrame::GetMapPoints()
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   return map_points_;
 }
 
-int KeyFrame::GetNumTrackedPoints(int min_observations) const
+int KeyFrame::GetNumTrackedPoints(int min_observations)
 {
+  std::lock_guard<std::mutex> lock(kf_mutex_);
   int tracked_points = 0;
   for (auto mp:map_points_) {
     if (mp == nullptr || mp->Culled() ||

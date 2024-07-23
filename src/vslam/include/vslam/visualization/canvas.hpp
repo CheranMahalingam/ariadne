@@ -5,25 +5,26 @@
 #include <opencv2/core.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include <mutex>
+#include <optional>
+
 namespace vslam
 {
 
 class Canvas
 {
 public:
-  Canvas(
-    rclcpp::Publisher<foxglove_msgs::msg::PoseInFrame>::SharedPtr pose_pub);
-
-  void Run();
+  Canvas();
 
   void SetCameraPose(const cv::Mat & pose_cw);
+  std::optional<foxglove_msgs::msg::PoseInFrame> GetCameraPose(
+    rclcpp::Time t);
 
 private:
-  void publishPose();
+  std::mutex canvas_mutex_;
 
   cv::Mat pose_;
-
-  rclcpp::Publisher<foxglove_msgs::msg::PoseInFrame>::SharedPtr pose_pub_;
+  bool pose_modified_;
 };
 
 }  // vslam

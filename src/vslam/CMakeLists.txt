@@ -32,6 +32,7 @@ find_package(sensor_msgs REQUIRED)
 
 find_package(Eigen3 REQUIRED)
 find_package(G2O REQUIRED)
+find_package(glog REQUIRED)
 find_package(OpenCV REQUIRED)
 
 find_library(DBoW3_LIB libDBoW3.so)
@@ -77,6 +78,7 @@ add_executable(vslam_node src/vslam_node.cpp)
 target_link_libraries(vslam_node
   vslam_lib
   DBoW3
+  glog::glog
   ${EIGEN3_LIBS}
   ${G2O_LIBS}
   ${OpenCV_LIBS})

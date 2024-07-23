@@ -46,7 +46,7 @@ public:
    * y = (v - cy) * z / fy. Finally, this is projected onto the world frame
    * using the world to camera transformation matrix.
    */
-  virtual cv::Mat UnprojectToWorldFrame(int point_idx) const = 0;
+  virtual cv::Mat UnprojectToWorldFrame(int point_idx) = 0;
 
   CameraParams camera_params;
 
@@ -91,7 +91,7 @@ public:
     const DBoW3::Vocabulary & vocabulary,
     const CameraParams & camera_params);
 
-  cv::Mat UnprojectToWorldFrame(int point_idx) const override;
+  cv::Mat UnprojectToWorldFrame(int point_idx) override;
 
   /**
    * Validates whether a map point lies within the camera's FOV (frustum).

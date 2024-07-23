@@ -48,10 +48,10 @@ int hamming_distance(const cv::Mat & a, const cv::Mat & b)
 g2o::SE3Quat convertToSE3Quat(const cv::Mat & transform)
 {
   Eigen::Matrix<double, 3, 3> rotation;
-  rotation << (
+  rotation <<
     transform.at<float>(0, 0), transform.at<float>(0, 1), transform.at<float>(0, 2),
     transform.at<float>(1, 0), transform.at<float>(1, 1), transform.at<float>(1, 2),
-    transform.at<float>(2, 0), transform.at<float>(2, 1), transform.at<float>(2, 2));
+    transform.at<float>(2, 0), transform.at<float>(2, 1), transform.at<float>(2, 2);
   Eigen::Matrix<double, 3, 1> translation(
     transform.at<float>(0, 3), transform.at<float>(1, 3), transform.at<float>(2, 3));
   return g2o::SE3Quat(rotation, translation);

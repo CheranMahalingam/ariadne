@@ -17,7 +17,7 @@ FeatureMatcher::FeatureMatcher(float nn_dist_ratio)
 }
 
 int FeatureMatcher::BoWSearch(
-  const KeyFrame & key_frame, const Frame & curr_frame,
+  KeyFrame & key_frame, const Frame & curr_frame,
   std::vector<std::shared_ptr<MapPoint>> & matching_points) const
 {
   std::array<std::vector<int>, HISTOGRAM_BINS> rotation_histogram;
@@ -60,7 +60,7 @@ int FeatureMatcher::BoWSearch(
         }
 
         if (min_distance_1 <= MIN_DISTANCE_THRESHOLD &&
-          min_distance_1 * nn_dist_ratio_ > min_distance_2)
+          min_distance_1 > min_distance_2 * nn_dist_ratio_)
         {
           matching_points[min_distance_idx] = kf_map_points[kf_idx];
           valid_matches[min_distance_idx] = true;
@@ -106,7 +106,7 @@ int FeatureMatcher::ProjectionSearch(
 
   for (int i = 0; i < int(prev_frame.key_points.size()); i++) {
     auto map_point = prev_frame.map_points[i];
-    if (map_point == nullptr || map_point->Culled()) {
+    if (map_point == nullptr || prev_frame.outliers[i]) {
       continue;
     }
 
@@ -245,7 +245,7 @@ int FeatureMatcher::ProjectionSearch(
 
     if (min_distance_1 < MIN_DISTANCE_THRESHOLD) {
       if (min_distance_level_1 == min_distance_level_2 &&
-        min_distance_1 * nn_dist_ratio_ > min_distance_2)
+        min_distance_1 > min_distance_2 * nn_dist_ratio_)
       {
         continue;
       }

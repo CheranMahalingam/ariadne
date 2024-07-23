@@ -6,7 +6,9 @@
 
 #include "g2o/core/block_solver.h"
 #include "g2o/core/optimization_algorithm_levenberg.h"
+#include "g2o/solvers/dense/linear_solver_dense.h"
 #include "g2o/solvers/eigen/linear_solver_eigen.h"
+#include <rclcpp/rclcpp.hpp>
 
 #include <vector>
 
@@ -169,7 +171,7 @@ int Optimizer::PoseOptimization(std::shared_ptr<Frame> frame)
   g2o::SparseOptimizer optimizer;
   auto solver = new g2o::OptimizationAlgorithmLevenberg(
     std::make_unique<BlockSolver>(
-      std::make_unique<g2o::LinearSolverEigen<BlockSolver::PoseMatrixType>>()));
+      std::make_unique<g2o::LinearSolverDense<BlockSolver::PoseMatrixType>>()));
   optimizer.setAlgorithm(solver);
 
   auto frame_vertex = new g2o::VertexSE3Expmap();
@@ -219,6 +221,7 @@ int Optimizer::PoseOptimization(std::shared_ptr<Frame> frame)
     optimizer.optimize(LEVENBERG_OPTIMIZATION_ITERATIONS);
 
     outliers = 0;
+    double min_chi2 = -1;
     for (int i = 0; i < int(edges.size()); i++) {
       auto edge = edges[i];
       auto valid_idx = valid_edges[i];
@@ -226,7 +229,11 @@ int Optimizer::PoseOptimization(std::shared_ptr<Frame> frame)
         edge->computeError();
       }
 
-      if (edge->chi2() > G2O_EDGE_CHI2_THRESHOLD) {
+      auto chi2 = edge->chi2();
+      if (chi2 < min_chi2 || min_chi2 == -1) {
+        min_chi2 = chi2;
+      }
+      if (chi2 > G2O_EDGE_CHI2_THRESHOLD) {
         frame->outliers[valid_idx] = true;
         edge->setLevel(1);
         outliers++;
@@ -237,12 +244,13 @@ int Optimizer::PoseOptimization(std::shared_ptr<Frame> frame)
 
       // If previous optimization attempts failed, try again without a Huber
       // kernel.
-      if (i == POSE_OPTIMIZATION_ITERATIONS / 2) {
+      if (iteration == POSE_OPTIMIZATION_ITERATIONS / 2) {
         edge->setRobustKernel(0);
       }
     }
 
-    if (optimizer.edges().size() < 10) {
+    auto optimizer_edges = optimizer.edges().size();
+    if (optimizer_edges < 10) {
       break;
     }
   }
@@ -251,11 +259,14 @@ int Optimizer::PoseOptimization(std::shared_ptr<Frame> frame)
     optimizer.vertex(0));
   auto pose = convertToMat(optimized_vertex->estimate());
   frame->SetPose(pose);
+  RCLCPP_INFO(
+    rclcpp::get_logger("optimizer"),
+    "Found %d inliers and %d outliers", initial_inliers, outliers);
   return initial_inliers - outliers;
 }
 
 void Optimizer::addVertex(
-  g2o::SparseOptimizer & optimizer, const KeyFrame * kf, int & max_kf_id)
+  g2o::SparseOptimizer & optimizer, KeyFrame * kf, int & max_kf_id)
 {
   auto vertex = new g2o::VertexSE3Expmap();
   vertex->setEstimate(

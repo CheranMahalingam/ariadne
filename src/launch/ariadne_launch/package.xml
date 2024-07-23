@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>orb_pilot_launch</name>
+  <name>ariadne_launch</name>
   <version>0.0.0</version>
   <description>
-      The orb_pilot_launch package
+      The ariadne_launch package
   </description>
   <maintainer email="cheranm@outlook.com">Cheran Mahalingam</maintainer>
   <license>TODO: License declaration</license>

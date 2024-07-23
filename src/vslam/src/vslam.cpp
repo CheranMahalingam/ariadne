@@ -9,6 +9,10 @@
 #include "DBoW3/DBoW3.h"
 #include <cv_bridge/cv_bridge.h>
 
+#include <algorithm>
+#include <chrono>
+#include <thread>
+
 namespace vslam
 {
 
@@ -22,6 +26,8 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   this->declare_parameter("orb_min_FAST_threshold", 7);
   this->declare_parameter("camera_fx", 500.0);
   this->declare_parameter("camera_fy", 500.0);
+  this->declare_parameter("camera_cx", 320.0);
+  this->declare_parameter("camera_cy", 240.0);
   this->declare_parameter("camera_width", 1920);
   this->declare_parameter("camera_height", 1080);
   this->declare_parameter("camera_fps", 30);
@@ -79,11 +85,11 @@ VSLAMNode::VSLAMNode(const rclcpp::NodeOptions & options)
   local_mapper_ = std::make_unique<LocalMapper>(map);
   lm_thread_ = std::jthread(&LocalMapper::Run, local_mapper_.get());
 
-  canvas_ = std::make_unique<Canvas>(debug_pose_pub_);
-  canvas_thread_ = std::jthread(&Canvas::Run, canvas_.get());
-
+  canvas_ = std::make_unique<Canvas>();
   tracker_ = std::make_unique<Tracker>(
     canvas_.get(), local_mapper_.get(), map, v, fp, cp);
+
+  draw_thread_ = std::jthread(&VSLAMNode::drawLoop, this);
 }
 
 VSLAMNode::~VSLAMNode() = default;
@@ -95,6 +101,24 @@ void VSLAMNode::rgbdImageCallback(
   auto cv_ptr_rgb = cv_bridge::toCvShare(rgb_image);
   auto cv_ptr_depth = cv_bridge::toCvShare(depth_image);
   tracker_->Track(cv_ptr_rgb->image, cv_ptr_depth->image, cv_ptr_rgb->header.stamp);
+}
+
+void VSLAMNode::drawLoop()
+{
+  while (true) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    if (auto pose = canvas_->GetCameraPose(this->get_clock()->now())) {
+      debug_pose_pub_->publish(*pose);
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsed = end - start;
+    auto sleep_duration = std::max(
+      std::chrono::duration<double, std::milli>(0),
+      std::chrono::milliseconds(100) - elapsed);
+    std::this_thread::sleep_for(sleep_duration);
+  }
 }
 
 }  // vslam

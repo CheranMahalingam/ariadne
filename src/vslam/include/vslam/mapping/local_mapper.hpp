@@ -48,8 +48,7 @@ private:
    * Constructs the fundamental matrix to compute the epipolar line in one frame
    * given a known point in the other frame.
    */
-  cv::Mat computeFundamentalMatrix(
-    const KeyFrame * kf1, const KeyFrame * kf2) const;
+  cv::Mat computeFundamentalMatrix(KeyFrame * kf1, KeyFrame * kf2);
 
   /**
    * Computes the position of a new point in the world frame using two points
@@ -60,7 +59,7 @@ private:
     const CameraParams & params,
     const cv::KeyPoint & kp1, const cv::KeyPoint & kp2,
     const cv::Mat & rotation_c1w, const cv::Mat & rotation_c2w,
-    const cv::Mat & translation_c1w, const cv::Mat & translation_c2w) const;
+    const cv::Mat & translation_c1w, const cv::Mat & translation_c2w);
 
   /**
    * For a new map point created using triangulation, validate that it appears
@@ -68,7 +67,7 @@ private:
    */
   bool validateTriangulationVisible(
     const cv::Mat & world_pos,
-    const cv::Mat & rotation_cw, const cv::Mat & translation_cw) const;
+    const cv::Mat & rotation_cw, const cv::Mat & translation_cw);
   /**
    * Validate that when a triangulated point is projected onto the pixel frame
    * the distance to the original map point is below a specified threshold.
@@ -76,7 +75,7 @@ private:
   bool validateReprojectionError(
     const CameraParams & params,
     const cv::Mat & world_pos, const cv::KeyPoint & kp,
-    const cv::Mat & rotation_cw, const cv::Mat & translation_cw) const;
+    const cv::Mat & rotation_cw, const cv::Mat & translation_cw);
   /**
    * Validate that the triangulated point's distance from each original frame
    * is consistent with the scale of each key point.
@@ -84,7 +83,7 @@ private:
   bool validateScaleConsistency(
     const cv::Mat & world_pos,
     const cv::KeyPoint & kp1, const cv::KeyPoint & kp2,
-    const cv::Mat & center_c1, const cv::Mat & center_c2) const;
+    const cv::Mat & center_c1, const cv::Mat & center_c2);
 
   std::mutex queue_mutex_;
   std::condition_variable queue_cv_;

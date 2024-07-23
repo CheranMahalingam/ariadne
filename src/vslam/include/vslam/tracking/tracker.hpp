@@ -56,6 +56,8 @@ public:
 private:
   void initializePose();
 
+  void updateReplacedPoints();
+
   bool trackUsingMotionModel();
   bool trackUsingReferenceFrame();
   void updatePrevFrame();
@@ -84,6 +86,7 @@ private:
 
   std::vector<std::shared_ptr<KeyFrame>> local_key_frames_;
   std::vector<std::shared_ptr<MapPoint>> local_map_points_;
+  std::vector<std::shared_ptr<MapPoint>> temp_map_points_;
 
   std::shared_ptr<Map> map_;
 

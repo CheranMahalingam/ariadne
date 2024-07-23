@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(orb_pilot_launch)
+project(ariadne_launch)
 
 find_package(ament_cmake REQUIRED)
 

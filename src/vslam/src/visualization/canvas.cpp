@@ -1,52 +1,49 @@
 #include "vslam/utils.hpp"
 #include "vslam/visualization/canvas.hpp"
 
-#include <algorithm>
-#include <chrono>
-#include <thread>
-
 namespace vslam
 {
 
-Canvas::Canvas(
-  rclcpp::Publisher<foxglove_msgs::msg::PoseInFrame>::SharedPtr pose_pub)
-: pose_pub_(pose_pub)
+Canvas::Canvas()
+: pose_modified_(false)
 {
-}
-
-void Canvas::Run()
-{
-  while (true) {
-    auto start = std::chrono::high_resolution_clock::now();
-
-    publishPose();
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> elapsed = end - start;
-    auto sleep_duration = std::max(
-      std::chrono::duration<double, std::milli>(0),
-      std::chrono::milliseconds(100) - elapsed);
-    std::this_thread::sleep_for(sleep_duration);
-  }
 }
 
 void Canvas::SetCameraPose(const cv::Mat & pose_cw)
 {
+  std::lock_guard<std::mutex> lock(canvas_mutex_);
   pose_ = pose_cw.clone();
+  pose_modified_ = true;
 }
 
-void Canvas::publishPose()
+std::optional<foxglove_msgs::msg::PoseInFrame> Canvas::GetCameraPose(
+  rclcpp::Time t)
 {
-  auto g2o_pose = convertToSE3Quat(pose_);
+  cv::Mat pose;
+  {
+    std::lock_guard<std::mutex> lock(canvas_mutex_);
+    if (!pose_modified_) {
+      return {};
+    }
+    pose_modified_ = false;
+    pose = pose_.clone();
+  }
+
+  auto g2o_pose = convertToSE3Quat(pose);
   auto translation = g2o_pose.translation();
   auto rotation = g2o_pose.rotation();
+
   foxglove_msgs::msg::PoseInFrame pose_marker;
-  // pose_marker.timestamp = 
+  pose_marker.timestamp = t;
   pose_marker.frame_id = "world";
-  pose_marker.pose.position.x = translation;
-  pose_marker.pose.position.y = translation;
-  pose_marker.pose.position.z = translation;
-  pose_pub_->publish(pose_marker);
+  pose_marker.pose.position.x = translation(0);
+  pose_marker.pose.position.y = translation(1);
+  pose_marker.pose.position.z = translation(2);
+  pose_marker.pose.orientation.x = rotation.x();
+  pose_marker.pose.orientation.y = rotation.y();
+  pose_marker.pose.orientation.z = rotation.z();
+  pose_marker.pose.orientation.w = rotation.w();
+  return pose_marker;
 }
 
 }  // vslam

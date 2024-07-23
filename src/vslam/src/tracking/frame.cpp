@@ -125,7 +125,7 @@ void FrameBase::populateGrid()
     const auto & kp = key_points[i];
     int pos_x = kp.pt.x / FRAME_GRID_SIZE;
     int pos_y = kp.pt.y / FRAME_GRID_SIZE;
-    assert(pos_x < grid.size() && pos_y < grid[0].size());
+    assert(pos_x < int(grid.size()) && pos_y < int(grid[0].size()));
     grid[pos_x][pos_y].push_back(i);
   }
 }
@@ -135,10 +135,11 @@ void FrameBase::computeStereo(const cv::Mat & depth)
   for (int i = 0; i < int(key_points.size()); i++) {
     auto kp = key_points[i];
     float d = depth.at<float>(kp.pt.y, kp.pt.x);
-    assert(d > 0);
-    depth_points[i] = d;
-    float bf = camera_params.fx * camera_params.depth_baseline / 1000.0;
-    stereo_key_points[i] = kp.pt.x - bf / d;
+    if (d > 0) {
+      depth_points[i] = d;
+      float bf = camera_params.fx * camera_params.depth_baseline / 1000.0;
+      stereo_key_points[i] = kp.pt.x - bf / d;
+    }
   }
 }
 
@@ -172,7 +173,7 @@ Frame::Frame(
   frame_id++;
 }
 
-cv::Mat Frame::UnprojectToWorldFrame(int point_idx) const
+cv::Mat Frame::UnprojectToWorldFrame(int point_idx)
 {
   return unprojectKeyPoint(point_idx, pose);
 }
@@ -222,7 +223,7 @@ bool Frame::ValidFrustumProjection(std::shared_ptr<MapPoint> mp) const
 
 void Frame::SetPose(cv::Mat pose_cw)
 {
-  pose.SetPose(pose_cw);
+  pose.SetPose(pose_cw.clone());
 }
 
 }  // vslam

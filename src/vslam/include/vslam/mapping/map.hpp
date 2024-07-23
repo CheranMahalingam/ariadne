@@ -2,6 +2,7 @@
 #define VSLAM__MAP_HPP_
 
 #include <memory>
+#include <mutex>
 #include <set>
 #include <vector>
 
@@ -21,14 +22,18 @@ public:
   void EraseKeyFrame(std::shared_ptr<KeyFrame> kf);
   void EraseMapPoint(std::shared_ptr<MapPoint> mp);
 
-  int GetKeyFrameCount() const;
-  int GetMapPointCount() const;
-  std::vector<std::shared_ptr<KeyFrame>> GetKeyFrames() const;
-  std::vector<std::shared_ptr<MapPoint>> GetMapPoints() const;
+  int GetKeyFrameCount();
+  int GetMapPointCount();
+  std::vector<std::shared_ptr<KeyFrame>> GetKeyFrames();
+  std::vector<std::shared_ptr<MapPoint>> GetMapPoints();
+
+  std::mutex mp_creation_mutex;
 
   std::shared_ptr<KeyFrame> origin;
 
 private:
+  std::mutex map_mutex_;
+
   std::set<std::shared_ptr<KeyFrame>> visited_key_frames_;
   std::set<std::shared_ptr<MapPoint>> visited_map_points_;
   std::vector<std::shared_ptr<MapPoint>> local_map_points_;

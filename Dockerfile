@@ -91,7 +91,9 @@ RUN curl -L https://get.oh-my.fish > install && \
     fish -c "omf install bass" && \
     rm install && \
     git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && \
-    ~/.fzf/install
+    ~/.fzf/install && \
+    wget -P ~ https://github.com/cyrus-and/gdb-dashboard/raw/master/.gdbinit && \
+    echo "target remote localhost:3000" > ~/.gdbinit
 
 RUN <<EOF cat>> ~/.config/fish/config.fish
 # Workaround for newer git versions where git verifies that the parent directory

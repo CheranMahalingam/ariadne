@@ -10,9 +10,9 @@ import os
 
 
 def generate_launch_description():
-    orb_pilot_launch_pkg_prefix = get_package_share_directory('orb_pilot_launch')
+    ariadne_launch_pkg_prefix = get_package_share_directory('ariadne_launch')
     foxglove_param_file = os.path.join(
-        orb_pilot_launch_pkg_prefix, 'config/foxglove_params.yaml')
+        ariadne_launch_pkg_prefix, 'config/foxglove_params.yaml')
 
     foxglove_param = DeclareLaunchArgument(
         'foxglove_param_file',

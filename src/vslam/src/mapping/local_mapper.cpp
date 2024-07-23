@@ -36,6 +36,9 @@ void LocalMapper::Run()
       cullKeyFrames();
     }
 
+    // Tracker checks whether the queue is empty as a condition for inserting a
+    // new key frame. We delay popping key frames from the queue until the
+    // local mapper is done.
     {
       std::lock_guard<std::mutex> lock(queue_mutex_);
       kf_queue_.pop();
@@ -291,8 +294,7 @@ void LocalMapper::cullMapPoints()
   }
 }
 
-cv::Mat LocalMapper::computeFundamentalMatrix(
-  const KeyFrame * kf1, const KeyFrame * kf2) const
+cv::Mat LocalMapper::computeFundamentalMatrix(KeyFrame * kf1, KeyFrame * kf2)
 {
   auto rotation_c1w = kf1->GetRotation();
   auto translation_c1w = kf1->GetTranslation();
@@ -316,7 +318,7 @@ std::optional<cv::Mat> LocalMapper::triangulateNewPoint(
   const CameraParams & params,
   const cv::KeyPoint & kp1, const cv::KeyPoint & kp2,
   const cv::Mat & rotation_c1w, const cv::Mat & rotation_c2w,
-  const cv::Mat & translation_c1w, const cv::Mat & translation_c2w) const
+  const cv::Mat & translation_c1w, const cv::Mat & translation_c2w)
 {
   // Project points from pixel to camera frame (using normalized homogeneous
   // coordinates).
@@ -355,7 +357,7 @@ std::optional<cv::Mat> LocalMapper::triangulateNewPoint(
 
 bool LocalMapper::validateTriangulationVisible(
   const cv::Mat & world_pos,
-  const cv::Mat & rotation_cw, const cv::Mat & translation_cw) const
+  const cv::Mat & rotation_cw, const cv::Mat & translation_cw)
 {
   float depth = rotation_cw.row(2).dot(world_pos.t()) + translation_cw.at<float>(2);
   return depth > 0;
@@ -364,7 +366,7 @@ bool LocalMapper::validateTriangulationVisible(
 bool LocalMapper::validateReprojectionError(
   const CameraParams & params,
   const cv::Mat & world_pos, const cv::KeyPoint & kp,
-  const cv::Mat & rotation_cw, const cv::Mat & translation_cw) const
+  const cv::Mat & rotation_cw, const cv::Mat & translation_cw)
 {
   // Project point onto camera frame.
   cv::Mat camera_pos = rotation_cw * world_pos + translation_cw;
@@ -384,7 +386,7 @@ bool LocalMapper::validateReprojectionError(
 bool LocalMapper::validateScaleConsistency(
   const cv::Mat & world_pos,
   const cv::KeyPoint & kp1, const cv::KeyPoint & kp2,
-  const cv::Mat & center_c1, const cv::Mat & center_c2) const
+  const cv::Mat & center_c1, const cv::Mat & center_c2)
 {
   auto dist1 = cv::norm(world_pos - center_c1);
   auto dist2 = cv::norm(world_pos - center_c2);

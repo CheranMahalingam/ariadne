@@ -1,8 +1,10 @@
 #include "vslam/mapping/map.hpp"
 #include "vslam/mapping/map_point.hpp"
+#include "vslam/tracking/frame.hpp"
 #include "vslam/tracking/key_frame.hpp"
 #include "vslam/utils.hpp"
 
+#include <mutex>
 #include <ranges>
 
 namespace vslam
@@ -13,21 +15,57 @@ long int MapPoint::point_id = 0;
 MapPoint::MapPoint(
   cv::Mat pos, std::shared_ptr<KeyFrame> key_frame, std::shared_ptr<Map> map)
 : initial_kf_id(key_frame->curr_id),
-  curr_id(point_id),
-  world_pos_(pos),
+  world_pos_(pos.clone()),
+  min_distance_(0),
+  max_distance_(0),
   culled_(false),
+  num_found_(1),
+  num_visible_(1),
   num_observations_(0),
   kf_ref_(key_frame),
   map_(map)
 {
+  normal_vector_ = cv::Mat::zeros(3, 1, CV_32F);
+
+  std::lock_guard<std::mutex> lock(map->mp_creation_mutex);
+  curr_id = point_id;
+  point_id++;
+}
+
+MapPoint::MapPoint(
+  cv::Mat pos, std::shared_ptr<Map> map, std::shared_ptr<Frame> frame, int idx)
+: initial_kf_id(-1),
+  world_pos_(pos.clone()),
+  culled_(false),
+  num_found_(1),
+  num_visible_(1),
+  num_observations_(0),
+  kf_ref_(nullptr),
+  map_(map)
+{
+  auto normal = world_pos_ - frame->pose.translation_wc;
+  auto dist = cv::norm(normal);
+  normal_vector_ = normal / dist;
+
+  auto level = frame->key_points[idx].octave;
+  auto scale_factors = frame->image_scale_factors;
+  max_distance_ = dist * scale_factors[level];
+  min_distance_ = max_distance_ / scale_factors[scale_factors.size() - 1];
+
+  frame->descriptors[idx].copyTo(descriptor_);
+
+  std::lock_guard<std::mutex> lock(map->mp_creation_mutex);
+  curr_id = point_id;
   point_id++;
 }
 
 void MapPoint::AddObservation(std::shared_ptr<KeyFrame> kf, int idx)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   if (observations_.find(kf) != observations_.end()) {
     return;
   }
+
   if (kf->stereo_key_points[idx] >= 0) {
     num_observations_ += 2;
   } else {
@@ -37,6 +75,7 @@ void MapPoint::AddObservation(std::shared_ptr<KeyFrame> kf, int idx)
 
 void MapPoint::EraseObservation(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   if (observations_.find(kf) == observations_.end()) {
     return;
   }
@@ -65,8 +104,24 @@ void MapPoint::UpdateObservations()
 
 void MapPoint::Replace(std::shared_ptr<MapPoint> mp)
 {
-  culled_ = true;
-  for (auto [kf, idx]:observations_) {
+  if (mp->curr_id == this->curr_id) {
+    return;
+  }
+
+  std::map<std::shared_ptr<KeyFrame>, int> observations;
+  int num_found;
+  int num_visible;
+  {
+    std::lock_guard<std::mutex> lock(mp_mutex_);
+    culled_ = true;
+    observations = observations_;
+    observations_.clear();
+    num_found = num_found_;
+    num_visible = num_visible_;
+    replaced_point_ = mp;
+  }
+
+  for (auto [kf, idx]:observations) {
     if (mp->InKeyFrame(kf)) {
       kf->EraseMapPoint(idx);
     } else {
@@ -76,98 +131,124 @@ void MapPoint::Replace(std::shared_ptr<MapPoint> mp)
     }
   }
 
-  mp->IncreaseFound(num_found_);
-  mp->IncreaseVisible(num_visible_);
+  mp->IncreaseFound(num_found);
+  mp->IncreaseVisible(num_visible);
   mp->UpdateObservations();
 
-  observations_.clear();
-  num_observations_ = 0;
-  num_found_ = 0;
-  num_visible_ = 0;
   map_->EraseMapPoint(shared_from_this());
 }
 
 void MapPoint::Cull()
 {
-  culled_ = true;
-  for (auto & [kf, idx]:observations_) {
+  std::map<std::shared_ptr<KeyFrame>, int> observations;
+  {
+    std::lock_guard<std::mutex> lock(mp_mutex_);
+    culled_ = true;
+    observations = observations_;
+
+    observations_.clear();
+    num_observations_ = 0;
+  }
+
+  for (auto & [kf, idx]:observations) {
     kf->EraseMapPoint(idx);
   }
-  observations_.clear();
-  num_observations_ = 0;
   map_->EraseMapPoint(shared_from_this());
 }
 
-bool MapPoint::Culled() const
+bool MapPoint::Culled()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return culled_;
 }
 
-bool MapPoint::InKeyFrame(std::shared_ptr<KeyFrame> kf) const
+bool MapPoint::InKeyFrame(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return observations_.find(kf) != observations_.end();
 }
 
 void MapPoint::IncreaseFound(int n)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   num_found_ += n;
 }
 
 void MapPoint::IncreaseVisible(int n)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   num_visible_ += n;
 }
 
-float MapPoint::FoundRatio() const
+float MapPoint::FoundRatio()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return num_found_ / num_visible_;
 }
 
 void MapPoint::SetWorldPos(cv::Mat world_pos)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   world_pos.copyTo(world_pos_);
 }
 
-cv::Mat MapPoint::GetWorldPos() const
+cv::Mat MapPoint::GetWorldPos()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return world_pos_.clone();
 }
 
-cv::Mat MapPoint::GetNormal() const
+cv::Mat MapPoint::GetNormal()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return normal_vector_.clone();
 }
 
-cv::Mat MapPoint::GetDescriptor() const
+cv::Mat MapPoint::GetDescriptor()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return descriptor_.clone();
 }
 
-std::pair<float, float> MapPoint::GetDistanceInvariance() const
+std::pair<float, float> MapPoint::GetDistanceInvariance()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return std::make_pair(min_distance_, max_distance_);
 }
 
-int MapPoint::GetNumObservations() const
+std::optional<std::shared_ptr<MapPoint>> MapPoint::GetReplacedPoint()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
+  if (replaced_point_ == nullptr) {
+    return {};
+  }
+  return replaced_point_;
+}
+
+int MapPoint::GetNumObservations()
+{
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return num_observations_;
 }
 
-int MapPoint::GetObservationIndex(std::shared_ptr<KeyFrame> kf) const
+int MapPoint::GetObservationIndex(std::shared_ptr<KeyFrame> kf)
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   if (observations_.find(kf) == observations_.end()) {
     return -1;
   }
   return observations_.at(kf);
 }
 
-const std::map<std::shared_ptr<KeyFrame>, int> MapPoint::GetObservations() const
+const std::map<std::shared_ptr<KeyFrame>, int> MapPoint::GetObservations()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return observations_;
 }
 
-std::shared_ptr<KeyFrame> MapPoint::GetReferenceKeyFrame() const
+std::shared_ptr<KeyFrame> MapPoint::GetReferenceKeyFrame()
 {
+  std::lock_guard<std::mutex> lock(mp_mutex_);
   return kf_ref_;
 }
 
@@ -187,8 +268,14 @@ int MapPoint::PredictScale(
 
 void MapPoint::computeDistinctDescriptors()
 {
+  std::map<std::shared_ptr<KeyFrame>, int> observations;
+  {
+    std::lock_guard<std::mutex> lock(mp_mutex_);
+    observations = observations_;
+  }
+
   std::vector<cv::Mat> observed_descriptors;
-  for (auto & [kf, idx]:observations_) {
+  for (auto & [kf, idx]:observations) {
     if (!kf->Culled()) {
       observed_descriptors.push_back(kf->descriptors[idx]);
     }
@@ -219,27 +306,44 @@ void MapPoint::computeDistinctDescriptors()
       min_descriptor = observed_descriptors[i];
     }
   }
-  descriptor_ = min_descriptor;
+
+  {
+    std::lock_guard<std::mutex> lock(mp_mutex_);
+    descriptor_ = min_descriptor;
+  }
 }
 
 void MapPoint::updateNormalAndDepth()
 {
+  std::map<std::shared_ptr<KeyFrame>, int> observations;
+  std::shared_ptr<KeyFrame> curr_kf;
+  cv::Mat pos;
+  {
+    std::lock_guard<std::mutex> lock(mp_mutex_);
+    observations = observations_;
+    curr_kf = kf_ref_;
+    pos = world_pos_.clone();
+  }
+
   auto normal = cv::Mat::zeros(3, 1, CV_32F);
-  for (auto [kf, _]:observations_) {
+  for (auto [kf, _]:observations) {
     auto kf_camera_pos = kf->GetCameraCenter();
-    auto normali = world_pos_ - kf_camera_pos;
+    auto normali = pos - kf_camera_pos;
     normal += normali / cv::norm(normali);
   }
 
-  auto camera_point_vec = world_pos_ - kf_ref_->GetCameraCenter();
+  auto camera_point_vec = pos - curr_kf->GetCameraCenter();
   auto dist = cv::norm(camera_point_vec);
-  auto level = kf_ref_->key_points[observations_[kf_ref_]].octave;
-  auto scale_factor = kf_ref_->image_scale_factors[level];
-  auto num_levels = kf_ref_->image_scale_factors.size();
+  auto level = curr_kf->key_points[observations_[curr_kf]].octave;
+  auto scale_factor = curr_kf->image_scale_factors[level];
+  auto num_levels = curr_kf->image_scale_factors.size();
 
-  max_distance_ = dist * scale_factor;
-  min_distance_ = max_distance_ / kf_ref_->image_scale_factors[num_levels - 1];
-  normal_vector_ = normal / observations_.size();
+  {
+    std::lock_guard<std::mutex> lock(mp_mutex_);
+    max_distance_ = dist * scale_factor;
+    min_distance_ = max_distance_ / curr_kf->image_scale_factors[num_levels - 1];
+    normal_vector_ = normal / observations.size();
+  }
 }
 
 }  // vslam

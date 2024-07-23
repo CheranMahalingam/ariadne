@@ -18,8 +18,8 @@ class Optimizer
 {
 public:
   static constexpr float G2O_EDGE_CHI2_THRESHOLD = 5.991;
-  static constexpr int POSE_OPTIMIZATION_ITERATIONS = 4;
-  static constexpr int LEVENBERG_OPTIMIZATION_ITERATIONS = 10;
+  static constexpr int POSE_OPTIMIZATION_ITERATIONS = 6;
+  static constexpr int LEVENBERG_OPTIMIZATION_ITERATIONS = 20;
   static constexpr int MINIMUM_VALID_MAP_POINTS = 3;
 
   Optimizer();
@@ -41,7 +41,7 @@ public:
 
 private:
   void addVertex(
-    g2o::SparseOptimizer & optimizer, const KeyFrame * kf, int & max_kf_id);
+    g2o::SparseOptimizer & optimizer, KeyFrame * kf, int & max_kf_id);
 
   template<typename T>
   void addEdge(
@@ -54,15 +54,16 @@ void Optimizer::addEdge(
   g2o::SparseOptimizer & optimizer, const FrameBase * frame,
   const cv::KeyPoint & kp, T * edge)
 {
-  Eigen::Matrix<double, 2, 1> pixel_pos(kp.pt.x, kp.pt.y);
+  Eigen::Matrix<double, 2, 1> pixel_pos;
+  pixel_pos << kp.pt.x, kp.pt.y;
   edge->setMeasurement(pixel_pos);
 
-  auto inv_scale = 1.0 / frame->image_scale_factors[kp.octave];
+  float inv_scale = 1.0 / frame->image_scale_factors[kp.octave];
   edge->setInformation(Eigen::Matrix2d::Identity() * inv_scale * inv_scale);
 
   auto huber_kernel = new g2o::RobustKernelHuber();
-  huber_kernel->setDelta(std::sqrt(G2O_EDGE_CHI2_THRESHOLD));
   edge->setRobustKernel(huber_kernel);
+  huber_kernel->setDelta(std::sqrt(G2O_EDGE_CHI2_THRESHOLD));
 
   edge->fx = frame->camera_params.fx;
   edge->fy = frame->camera_params.fy;

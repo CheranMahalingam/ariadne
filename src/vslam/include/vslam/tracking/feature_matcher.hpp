@@ -37,7 +37,7 @@ public:
    * Outliers are filtered using a rotation consistency check.
    */
   int BoWSearch(
-    const KeyFrame & key_frame, const Frame & curr_frame,
+    KeyFrame & key_frame, const Frame & curr_frame,
     std::vector<std::shared_ptr<MapPoint>> & matching_points) const;
 
   /**
